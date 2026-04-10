@@ -160,9 +160,6 @@ with spec_c3:
         </div>
     ''', unsafe_allow_html=True)
 
-    # Auto-suggest PSF based on the township
-    avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
-    psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 0 else 500.0)
 with spec_c4:
     trans_in = st.number_input("Transactions", value=10)
 
