@@ -131,9 +131,10 @@ def predict_price(town, area, state, p_type, tenure, psf, trans, adjustment):
 # ============================================================================
 # MAIN INTERFACE
 # ============================================================================
-st.sidebar.radio("Navigation", ["🔮 Price Predictor", "📊 Comparison Mode"])
+mode = st.sidebar.radio("Navigation", ["🔮 Price Predictor", "📊 Comparison Mode"])
 
-st.markdown('<p class="section-title">Step 1: Location </p>', unsafe_allow_html=True)
+if mode == "🔮 Price Predictor":
+    st.markdown('<p class="section-title">Step 1: Location </p>', unsafe_allow_html=True)
 loc_c1, loc_c2, loc_c3 = st.columns(3)
 
 with loc_c1:
