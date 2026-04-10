@@ -146,14 +146,19 @@ with spec_c1:
 with spec_c2:
     tenure_type = st.selectbox("Tenure", sorted(df[col_map['tenure']].unique()))
 with spec_c3:
-
     avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
-    # Setting min_value=0.0 prevents negative inputs
-    psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 0 else 0.0, min_value=0.0)
+    # Setting a floor of 10.0 (or whatever minimum you prefer)
+    psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 10 else 100.0, min_value=0.0)   
+    
+    MIN_PSF_THRESHOLD = 10.0  # Set your logical limit here
+    is_valid_psf = psf_in >= MIN_PSF_THRESHOLD
 
-# Show an immediate warning if PSF is 0
-if psf_in <= 0:
-    st.warning("⚠️ Invalid PSF: Please enter a logical Median PSF amount to proceed with the prediction.")
+    if not is_valid_psf:
+       st.markdown(f'''
+         <div style="background-color: #ff4b4b; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+            ⚠️ <b>Invalid Input:</b> Median PSF must be at least <b>RM {MIN_PSF_THRESHOLD}</b> to perform a calculation.
+        </div>
+    ''', unsafe_allow_html=True)
 
     # Auto-suggest PSF based on the township
     avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
@@ -182,7 +187,7 @@ if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=Tr
         final_price = raw_pred + adj
             
     # RESULT SECTION WITH NEW HEADERS
-    st.markdown('<div class="result-header">📊 PREDICTED PRICE RESULTS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="result-header" style="font-size: 24px; padding: 15px;">📊 PREDICTED PRICE RESULTS</div>', unsafe_allow_html=True)
     st.markdown(f"""
         <div class="result-card">
             <span style="color: #666; font-size: 0.9em;">ESTIMATED MARKET VALUE</span>
