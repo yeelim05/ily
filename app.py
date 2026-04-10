@@ -211,8 +211,10 @@ if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=Tr
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 
+pass
+
 # ============================================================================
-# PART 2: COMPARISON MODE (The New Part)
+# PART 2: COMPARISON MODE 
 # ============================================================================
 elif mode == "📊 Comparison Mode":
     st.markdown('<p class="section-title">Property Comparison Tool</p>', unsafe_allow_html=True)
@@ -263,3 +265,5 @@ elif mode == "📊 Comparison Mode":
         fig, ax = plt.subplots(figsize=(10, 4))
         sns.barplot(x='Location', y='Predicted Price', data=chart_data, palette=['#1e2130', '#27ae60'], ax=ax)
         st.pyplot(fig)
+
+	pass
