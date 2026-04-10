@@ -171,22 +171,35 @@ if mode == "🔮 Price Predictor":
 # ============================================================================
 # PART 2: MARKET RANKINGS (Big Picture Analysis)
 # ============================================================================
+# ============================================================================
+# PART 2: MARKET RANKINGS (Big Picture Analysis)
+# ============================================================================
 elif mode == "📊 Market Rankings":
     st.markdown('<p class="section-title">Regional Market Analysis</p>', unsafe_allow_html=True)
     
     sel_state = st.selectbox("Select State to Analyze", sorted(df[col_map['state']].unique()))
     
-    c1, c2 = st.columns(2)
+    # 1. Most Expensive Townships
+    st.subheader("💎 Top 10 Most Expensive Townships (Avg Price)")
+    top_10_price = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['price_val'].mean().sort_values(ascending=False).head(10)
     
-    with c1:
-        st.subheader("💎 Top 10 Most Expensive Townships (Avg Price)")
-        top_10_price = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['price_val'].mean().sort_values(ascending=False).head(10)
-        st.bar_chart(top_10_price)
+    fig1, ax1 = plt.subplots(figsize=(12, 6)) # Increased width
+    sns.barplot(x=top_10_price.index, y=top_10_price.values, palette="viridis", ax=ax1)
+    plt.xticks(rotation=45, ha='right') # Rotates the text 45 degrees
+    plt.ylabel("Avg Price (RM)")
+    plt.xlabel("Township")
+    st.pyplot(fig1)
         
-    with c2:
-        st.subheader("🔥 Top 10 Most Active Townships (Transactions)")
-        top_10_trans = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['trans_val'].sum().sort_values(ascending=False).head(10)
-        st.bar_chart(top_10_trans)
+    # 2. Most Active Townships
+    st.subheader("🔥 Top 10 Most Active Townships (Transactions)")
+    top_10_trans = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['trans_val'].sum().sort_values(ascending=False).head(10)
+    
+    fig2, ax2 = plt.subplots(figsize=(12, 6)) # Increased width
+    sns.barplot(x=top_10_trans.index, y=top_10_trans.values, palette="magma", ax=ax2)
+    plt.xticks(rotation=45, ha='right') # Rotates the text 45 degrees
+    plt.ylabel("Total Transactions")
+    plt.xlabel("Township")
+    st.pyplot(fig2)
 
     st.markdown('<p class="section-title">District-wise Price Breakdown</p>', unsafe_allow_html=True)
     area_stats = df[df[col_map['state']] == sel_state].groupby(col_map['area'])['price_val'].agg(['mean', 'count']).rename(columns={'mean': 'Avg Price (RM)', 'count': 'Data Points'})
