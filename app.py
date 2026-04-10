@@ -116,10 +116,22 @@ def load_app_core():
 
 df, model, encoders, col_map = load_app_core()
 
+def predict_price(town, area, state, p_type, tenure, psf, trans, adjustment):
+    input_data = [
+        psf, trans,
+        encoders['town'].transform([town])[0],
+        encoders['area'].transform([area])[0],
+        encoders['state'].transform([state])[0],
+        encoders['type'].transform([p_type])[0],
+        encoders['tenure'].transform([tenure])[0]
+    ]
+    return model.predict([input_data])[0] + adjustment
+
+
 # ============================================================================
 # MAIN INTERFACE
 # ============================================================================
-st.sidebar.radio("Navigation", ["🔮 Price Predictor"])
+st.sidebar.radio("Navigation", ["🔮 Price Predictor", "📊 Comparison Mode"])
 
 st.markdown('<p class="section-title">Step 1: Location </p>', unsafe_allow_html=True)
 loc_c1, loc_c2, loc_c3 = st.columns(3)
@@ -197,3 +209,56 @@ if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=Tr
         """, unsafe_allow_html=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
+
+# ============================================================================
+# PART 2: COMPARISON MODE (The New Part)
+# ============================================================================
+elif mode == "📊 Comparison Mode":
+    st.markdown('<p class="section-title">Property Comparison Tool</p>', unsafe_allow_html=True)
+    
+    col_a, col_b = st.columns(2)
+    
+    # Setup inputs for two different locations
+    with col_a:
+        st.subheader("📍 Location A")
+        state_a = st.selectbox("Select State", sorted(df[col_map['state']].unique()), key="s_a")
+        area_a = st.selectbox("Select Area", sorted(df[df[col_map['state']] == state_a][col_map['area']].unique()), key="a_a")
+        town_a = st.selectbox("Select Township", sorted(df[df[col_map['area']] == area_a][col_map['town']].unique()), key="t_a")
+        psf_a = st.number_input("Median PSF (A)", value=500.0, key="p_a")
+
+    with col_b:
+        st.subheader("📍 Location B")
+        state_b = st.selectbox("Select State", sorted(df[col_map['state']].unique()), key="s_b")
+        area_b = st.selectbox("Select Area", sorted(df[df[col_map['state']] == state_b][col_map['area']].unique()), key="a_b")
+        town_b = st.selectbox("Select Township", sorted(df[df[col_map['area']] == area_b][col_map['town']].unique()), key="t_b")
+        psf_b = st.number_input("Median PSF (B)", value=500.0, key="p_b")
+
+    st.markdown("---")
+    # Common shared attributes for comparison
+    c1, c2, c3 = st.columns(3)
+    with c1: comp_type = st.selectbox("Property Type", sorted(df[col_map['type']].unique()), key="c_type")
+    with c2: comp_tenure = st.selectbox("Tenure", sorted(df[col_map['tenure']].unique()), key="c_tenure")
+    with c3: comp_trans = st.number_input("Transactions", value=10, key="c_trans")
+
+    if st.button("RUN SIDE-BY-SIDE COMPARISON", type="primary", use_container_width=True):
+        price_a = predict_price(town_a, area_a, state_a, comp_type, comp_tenure, psf_a, comp_trans, 0)
+        price_b = predict_price(town_b, area_b, state_b, comp_type, comp_tenure, psf_b, comp_trans, 0)
+        
+        diff = price_b - price_a
+        percent_diff = (diff / price_a) * 100 if price_a != 0 else 0
+
+        # Aesthetic Comparison Results
+        res_a, res_b = st.columns(2)
+        with res_a:
+            st.metric(label=f"Value in {town_a}", value=f"RM {price_a:,.2f}")
+        with res_b:
+            st.metric(label=f"Value in {town_b}", value=f"RM {price_b:,.2f}", delta=f"{diff:,.2f} ({percent_diff:.1f}%)")
+
+        # Visualization Chart
+        chart_data = pd.DataFrame({
+            'Location': [town_a, town_b],
+            'Predicted Price': [price_a, price_b]
+        })
+        fig, ax = plt.subplots(figsize=(10, 4))
+        sns.barplot(x='Location', y='Predicted Price', data=chart_data, palette=['#1e2130', '#27ae60'], ax=ax)
+        st.pyplot(fig)
