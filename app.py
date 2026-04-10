@@ -23,13 +23,17 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 25px;
     }
-    /* Section Headers */
+  /* Section Headers */
     .section-title {
-        color: #1e2130;
-        border-bottom: 2px solid #1e2130;
+        color: #00d4ff; /* Electric Blue (Change to #27ae60 for Mint Green) */
+        border-bottom: 2px solid #00d4ff;
         padding-bottom: 5px;
+        margin-top: 25px;
         margin-bottom: 15px;
         font-weight: bold;
+        font-size: 1.2rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     /* Result Display Header */
     .result-header {
@@ -117,7 +121,7 @@ df, model, encoders, col_map = load_app_core()
 # ============================================================================
 st.sidebar.radio("Navigation", ["🔮 Price Predictor"])
 
-st.markdown('<p class="section-title">Step 1: Location Hierarchy (Validated Logic)</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-title">Step 1: Location </p>', unsafe_allow_html=True)
 loc_c1, loc_c2, loc_c3 = st.columns(3)
 
 with loc_c1:
@@ -142,6 +146,15 @@ with spec_c1:
 with spec_c2:
     tenure_type = st.selectbox("Tenure", sorted(df[col_map['tenure']].unique()))
 with spec_c3:
+
+    avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
+    # Setting min_value=0.0 prevents negative inputs
+    psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 0 else 0.0, min_value=0.0)
+
+# Show an immediate warning if PSF is 0
+if psf_in <= 0:
+    st.warning("⚠️ Invalid PSF: Please enter a logical Median PSF amount to proceed with the prediction.")
+
     # Auto-suggest PSF based on the township
     avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
     psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 0 else 500.0)
@@ -152,19 +165,22 @@ st.markdown("---")
 adj = st.number_input("Customer Price Adjustment (± RM):", value=0.0, step=100.0)
 
 if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=True):
-    # Encoding for prediction
-    input_data = [
-        psf_in, trans_in,
-        encoders['town'].transform([town_choice])[0],
-        encoders['area'].transform([area_choice])[0],
-        encoders['state'].transform([state_choice])[0],
-        encoders['type'].transform([prop_type])[0],
-        encoders['tenure'].transform([tenure_type])[0]
-    ]
-    
-    raw_pred = model.predict([input_data])[0]
-    final_price = raw_pred + adj
-    
+    if psf_in <= 0:
+        st.error("Error: Calculation failed. Median PSF must be greater than RM 0.")
+    else:
+        # Encoding for prediction
+        input_data = [
+            psf_in, trans_in,
+            encoders['town'].transform([town_choice])[0],
+            encoders['area'].transform([area_choice])[0],
+            encoders['state'].transform([state_choice])[0],
+            encoders['type'].transform([prop_type])[0],
+            encoders['tenure'].transform([tenure_type])[0]
+        ]
+        
+        raw_pred = model.predict([input_data])[0]
+        final_price = raw_pred + adj
+            
     # RESULT SECTION WITH NEW HEADERS
     st.markdown('<div class="result-header">📊 PREDICTED PRICE RESULTS</div>', unsafe_allow_html=True)
     st.markdown(f"""
@@ -172,9 +188,9 @@ if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=Tr
             <span style="color: #666; font-size: 0.9em;">ESTIMATED MARKET VALUE</span>
             <h2 style="color: #27ae60; margin: 0;">RM {final_price:,.2f}</h2>
             <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-            <p style="margin: 5px 0;"><b>Location:</b> {town_choice}, {area_choice}, {state_choice}</p>
-            <p style="margin: 5px 0;"><b>Property:</b> {prop_type} ({tenure_type})</p>
-            <small style="color: #999;">AI Base Estimate: RM {raw_pred:,.2f} | Adjustment: RM {adj:,.2f}</small>
+           <p style="margin: 5px 0; color: #1e2130;"><b>Location:</b> {town_choice}, {area_choice}, {state_choice}</p>
+	   <p style="margin: 5px 0; color: #1e2130;"><b>Property:</b> {prop_type} ({tenure_type})</p>
+            <small style="color: #999;">Statistical Baseline: RM {raw_pred:,.2f} | Adjustment: RM {adj:,.2f}</small>
         </div>
         """, unsafe_allow_html=True)
 
