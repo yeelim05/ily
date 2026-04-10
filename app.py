@@ -10,11 +10,10 @@ import gc
 # ============================================================================
 # UI CONFIGURATION & STYLING
 # ============================================================================
-st.set_page_config(page_title="Housing Price Predictor", layout="wide")
+st.set_page_config(page_title="Malaysia Housing Expert", layout="wide")
 
 st.markdown("""
     <style>
-    /* Dark Header from Prototype */
     .main-header {
         background-color: #1e2130;
         padding: 20px;
@@ -23,7 +22,6 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 25px;
     }
-    /* Section Headers */
     .section-title {
         color: #00d4ff; 
         border-bottom: 2px solid #00d4ff;
@@ -35,27 +33,27 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 1px;
     }
-    /* Result Display Header */
     .result-header {
         background-color: #f1f3f9;
-        padding: 10px;
-        border-radius: 5px 5px 0 0;
+        padding: 15px;
+        border-radius: 8px 8px 0 0;
         border-left: 10px solid #27ae60;
         font-weight: bold;
         color: #1e2130;
         margin-top: 20px;
+        font-size: 1.5rem;
     }
     .result-card {
         background-color: #ffffff;
         padding: 20px;
-        border-radius: 0 0 5px 5px;
+        border-radius: 0 0 8px 8px;
         border: 1px solid #f1f3f9;
         border-left: 10px solid #27ae60;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
     </style>
     <div class="main-header">
-        <h1>🏠 HOUSING PRICE IN MALAYSIA </h1>
+        <h1>🏠 MALAYSIA HOUSING PRICE EXPERT</h1>
     </div>
     """, unsafe_allow_html=True)
 
@@ -70,14 +68,10 @@ def load_app_core():
         df = ds['train'].to_pandas()
     except:
         df = pd.DataFrame({
-            'township': ['1 Bukit Utama', 'Alor Setar'], 
-            'area': ['Petaling Jaya', 'Kota Setar'], 
-            'state': ['Selangor', 'Kedah'], 
-            'type': ['Condo', 'Terrace'],
-            'tenure': ['Freehold', 'Freehold'], 
-            'median_psf': [800, 300], 
-            'transactions': [10, 5], 
-            'median_price': [1200000, 450000]
+            'township': ['1 Bukit Utama'], 'area': ['Petaling Jaya'], 
+            'state': ['Selangor'], 'type': ['Condo'],
+            'tenure': ['Freehold'], 'median_psf': [800], 
+            'transactions': [10], 'median_price': [1200000]
         })
 
     cols = df.columns.tolist()
@@ -105,17 +99,18 @@ def load_app_core():
 
     df['psf_val'] = pd.to_numeric(df[col_map['psf']], errors='coerce').fillna(0)
     df['trans_val'] = pd.to_numeric(df[col_map['trans']], errors='coerce').fillna(0)
+    df['price_val'] = pd.to_numeric(df[col_map['price']], errors='coerce').fillna(0)
     
     feature_cols = ['psf_val', 'trans_val', 'town_enc', 'area_enc', 'state_enc', 'type_enc', 'tenure_enc']
     model = RandomForestRegressor(n_estimators=50, max_depth=10, n_jobs=1, random_state=42)
-    model.fit(df[feature_cols], df[col_map['price']])
+    model.fit(df[feature_cols], df['price_val'])
     
     gc.collect()
     return df, model, encoders, col_map
 
 df, model, encoders, col_map = load_app_core()
 
-def predict_price(town, area, state, p_type, tenure, psf, trans, adjustment):
+def predict_logic(town, area, state, p_type, tenure, psf, trans):
     input_data = [
         psf, trans,
         encoders['town'].transform([town])[0],
@@ -124,119 +119,132 @@ def predict_price(town, area, state, p_type, tenure, psf, trans, adjustment):
         encoders['type'].transform([p_type])[0],
         encoders['tenure'].transform([tenure])[0]
     ]
-    return model.predict([input_data])[0] + adjustment
+    return model.predict([input_data])[0]
 
 # ============================================================================
-# MAIN INTERFACE
+# SIDEBAR NAVIGATION
 # ============================================================================
-mode = st.sidebar.radio("Navigation", ["🔮 Price Predictor", "📊 Comparison Mode"])
+mode = st.sidebar.radio("Navigation", ["🔮 Price Predictor", "📊 Comparison Mode", "💰 Mortgage Calculator"])
 
+# ============================================================================
+# PART 1: PRICE PREDICTOR
+# ============================================================================
 if mode == "🔮 Price Predictor":
-    st.markdown('<p class="section-title">Step 1: Location </p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Step 1: Location Selection</p>', unsafe_allow_html=True)
     loc_c1, loc_c2, loc_c3 = st.columns(3)
 
     with loc_c1:
-        state_list = sorted(df[col_map['state']].unique())
-        state_choice = st.selectbox("1. Select State", state_list)
-
+        state_choice = st.selectbox("Select State", sorted(df[col_map['state']].unique()))
     with loc_c2:
-        filtered_areas = sorted(df[df[col_map['state']] == state_choice][col_map['area']].unique())
-        area_choice = st.selectbox("2. Select Area (District)", filtered_areas)
-
+        area_choice = st.selectbox("Select Area", sorted(df[df[col_map['state']] == state_choice][col_map['area']].unique()))
     with loc_c3:
-        filtered_towns = sorted(df[df[col_map['area']] == area_choice][col_map['town']].unique())
-        town_choice = st.selectbox("3. Select Township", filtered_towns)
+        town_choice = st.selectbox("Select Township", sorted(df[df[col_map['area']] == area_choice][col_map['town']].unique()))
 
-    st.markdown('<p class="section-title">Step 2: Property Specifics</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Step 2: Property Details</p>', unsafe_allow_html=True)
     spec_c1, spec_c2, spec_c3, spec_c4 = st.columns(4)
 
     with spec_c1:
-        prop_type = st.selectbox("Type", sorted(df[col_map['type']].unique()))
+        prop_type = st.selectbox("Property Type", sorted(df[col_map['type']].unique()))
     with spec_c2:
         tenure_type = st.selectbox("Tenure", sorted(df[col_map['tenure']].unique()))
     with spec_c3:
-        avg_psf = df[df[col_map['town']] == town_choice]['psf_val'].mean()
-        psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf) if avg_psf > 10 else 100.0, min_value=0.0)   
-        
-        MIN_PSF_THRESHOLD = 10.0
-        is_valid_psf = psf_in >= MIN_PSF_THRESHOLD
-
-        if not is_valid_psf:
-            st.markdown(f'''
-                <div style="background-color: #ff4b4b; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
-                    ⚠️ <b>Invalid Input:</b> Median PSF must be at least <b>RM {MIN_PSF_THRESHOLD}</b> to perform a calculation.
-                </div>
-            ''', unsafe_allow_html=True)
-
+        avg_psf_val = df[df[col_map['town']] == town_choice]['psf_val'].mean()
+        psf_in = st.number_input("Median PSF (RM)", value=float(avg_psf_val) if avg_psf_val > 10 else 100.0, min_value=0.0)
     with spec_c4:
-        trans_in = st.number_input("Transactions", value=10)
+        trans_in = st.number_input("Transactions", value=10, min_value=1)
 
-    st.markdown("---")
-    adj = st.number_input("Customer Price Adjustment (± RM):", value=0.0, step=100.0)
+    adj = st.number_input("Manual Price Adjustment (± RM):", value=0.0, step=500.0)
+    
+    is_valid = psf_in >= 10.0
+    if not is_valid:
+        st.error("⚠️ Invalid PSF: Please enter a logical amount (at least RM 10.00).")
 
-    if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=True, disabled=not is_valid_psf):
-        # Calculate values
-        final_price = predict_price(town_choice, area_choice, state_choice, prop_type, tenure_type, psf_in, trans_in, adj)
-        raw_pred = final_price - adj
-            
-        # RESULT SECTION
-        st.markdown('<div class="result-header" style="font-size: 24px; padding: 15px;">📊 PREDICTED PRICE RESULTS</div>', unsafe_allow_html=True)
+    if st.button("CALCULATE PREDICTED PRICE", type="primary", use_container_width=True, disabled=not is_valid):
+        raw_val = predict_logic(town_choice, area_choice, state_choice, prop_type, tenure_type, psf_in, trans_in)
+        final_v = raw_val + adj
+        
+        st.markdown('<div class="result-header">📊 PREDICTED PRICE RESULTS</div>', unsafe_allow_html=True)
         st.markdown(f"""
             <div class="result-card">
                 <span style="color: #666; font-size: 0.9em; font-weight: bold;">ESTIMATED MARKET VALUE</span>
-                <h2 style="color: #27ae60; margin: 0;">RM {final_price:,.2f}</h2>
+                <h2 style="color: #27ae60; margin: 0; font-size: 2.5em;">RM {final_v:,.2f}</h2>
                 <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-                <p style="margin: 5px 0; color: #1e2130;"><b>Location:</b> {town_choice}, {area_choice}, {state_choice}</p>
-                <p style="margin: 5px 0; color: #1e2130;"><b>Property:</b> {prop_type} ({tenure_type})</p>
-                <small style="color: #999;">Statistical Baseline: RM {raw_pred:,.2f} | Adjustment: RM {adj:,.2f}</small>
+                <p style="margin: 5px 0; color: #1e2130; font-size: 1.1em;"><b>Location:</b> {town_choice}, {area_choice}</p>
+                <p style="margin: 5px 0; color: #1e2130; font-size: 1.1em;"><b>Property:</b> {prop_type} ({tenure_type})</p>
+                <small style="color: #999;">Statistical Baseline: RM {raw_val:,.2f} | Adjustment: RM {adj:,.2f}</small>
             </div>
-            """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 # ============================================================================
-# PART 2: COMPARISON MODE 
+# PART 2: COMPARISON MODE
 # ============================================================================
 elif mode == "📊 Comparison Mode":
-    st.markdown('<p class="section-title">Property Comparison Tool</p>', unsafe_allow_html=True)
-    
+    st.markdown('<p class="section-title">Side-by-Side Comparison</p>', unsafe_allow_html=True)
     col_a, col_b = st.columns(2)
     
     with col_a:
-        st.subheader("📍 Location A")
-        state_a = st.selectbox("Select State", sorted(df[col_map['state']].unique()), key="s_a")
-        area_a = st.selectbox("Select Area", sorted(df[df[col_map['state']] == state_a][col_map['area']].unique()), key="a_a")
-        town_a = st.selectbox("Select Township", sorted(df[df[col_map['area']] == area_a][col_map['town']].unique()), key="t_a")
-        psf_a = st.number_input("Median PSF (A)", value=500.0, key="p_a")
+        st.subheader("📍 Area A")
+        s_a = st.selectbox("State", sorted(df[col_map['state']].unique()), key="sa")
+        a_a = st.selectbox("Area", sorted(df[df[col_map['state']] == s_a][col_map['area']].unique()), key="aa")
+        t_a = st.selectbox("Township", sorted(df[df[col_map['area']] == a_a][col_map['town']].unique()), key="ta")
+        p_a = st.number_input("PSF (A)", value=500.0, key="pa")
 
     with col_b:
-        st.subheader("📍 Location B")
-        state_b = st.selectbox("Select State", sorted(df[col_map['state']].unique()), key="s_b")
-        area_b = st.selectbox("Select Area", sorted(df[df[col_map['state']] == state_b][col_map['area']].unique()), key="a_b")
-        town_b = st.selectbox("Select Township", sorted(df[df[col_map['area']] == area_b][col_map['town']].unique()), key="t_b")
-        psf_b = st.number_input("Median PSF (B)", value=500.0, key="p_b")
+        st.subheader("📍 Area B")
+        s_b = st.selectbox("State", sorted(df[col_map['state']].unique()), key="sb")
+        a_b = st.selectbox("Area", sorted(df[df[col_map['state']] == s_b][col_map['area']].unique()), key="ab")
+        t_b = st.selectbox("Township", sorted(df[df[col_map['area']] == a_b][col_map['town']].unique()), key="tb")
+        p_b = st.number_input("PSF (B)", value=500.0, key="pb")
 
-    st.markdown("---")
-    c1, c2, c3 = st.columns(3)
-    with c1: comp_type = st.selectbox("Property Type", sorted(df[col_map['type']].unique()), key="c_type")
-    with c2: comp_tenure = st.selectbox("Tenure", sorted(df[col_map['tenure']].unique()), key="c_tenure")
-    with c3: comp_trans = st.number_input("Transactions", value=10, key="c_trans")
-
-    if st.button("RUN SIDE-BY-SIDE COMPARISON", type="primary", use_container_width=True):
-        price_a = predict_price(town_a, area_a, state_a, comp_type, comp_tenure, psf_a, comp_trans, 0)
-        price_b = predict_price(town_b, area_b, state_b, comp_type, comp_tenure, psf_b, comp_trans, 0)
+    if st.button("RUN COMPARISON", type="primary", use_container_width=True):
+        v_a = predict_logic(t_a, a_a, s_a, "Terrace", "Freehold", p_a, 10)
+        v_b = predict_logic(t_b, a_b, s_b, "Terrace", "Freehold", p_b, 10)
         
-        diff = price_b - price_a
-        percent_diff = (diff / price_a) * 100 if price_a != 0 else 0
-
-        res_a, res_b = st.columns(2)
-        with res_a:
-            st.metric(label=f"Value in {town_a}", value=f"RM {price_a:,.2f}")
-        with res_b:
-            st.metric(label=f"Value in {town_b}", value=f"RM {price_b:,.2f}", delta=f"{diff:,.2f} ({percent_diff:.1f}%)")
-
-        chart_data = pd.DataFrame({
-            'Location': [town_a, town_b],
-            'Predicted Price': [price_a, price_b]
-        })
+        diff = v_b - v_a
+        c1, c2 = st.columns(2)
+        c1.metric(f"Value in {t_a}", f"RM {v_a:,.2f}")
+        c2.metric(f"Value in {t_b}", f"RM {v_b:,.2f}", delta=f"RM {diff:,.2f}")
+        
         fig, ax = plt.subplots(figsize=(10, 4))
-        sns.barplot(x='Location', y='Predicted Price', data=chart_data, palette=['#1e2130', '#27ae60'], ax=ax)
+        sns.barplot(x=[t_a, t_b], y=[v_a, v_b], palette=['#1e2130', '#27ae60'])
+        plt.title("Price Comparison (RM)")
+        st.pyplot(fig)
+
+    st.markdown('<p class="section-title">Top 10 Areas in State (Market Trends)</p>', unsafe_allow_html=True)
+    sel_state = st.selectbox("View Trends for State:", sorted(df[col_map['state']].unique()))
+    top_10 = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['price_val'].mean().sort_values(ascending=False).head(10)
+    st.bar_chart(top_10)
+
+# ============================================================================
+# PART 3: MORTGAGE CALCULATOR
+# ============================================================================
+elif mode == "💰 Mortgage Calculator":
+    st.markdown('<p class="section-title">Loan Affordability Calculator</p>', unsafe_allow_html=True)
+    m_col1, m_col2 = st.columns([1, 2])
+    
+    with m_col1:
+        price = st.number_input("Property Price (RM)", value=500000.0, step=10000.0)
+        dp_pct = st.slider("Downpayment (%)", 0, 50, 10)
+        interest = st.number_input("Interest Rate (%)", value=4.2, step=0.1)
+        tenure = st.slider("Tenure (Years)", 5, 35, 30)
+        
+        loan = price * (1 - dp_pct/100)
+        rate = (interest/100)/12
+        months = tenure * 12
+        monthly = (loan * rate * (1+rate)**months) / ((1+rate)**months - 1) if rate > 0 else loan/months
+
+    with m_col2:
+        st.markdown(f"""
+            <div class="result-card">
+                <span style="color: #666; font-size: 0.9em; font-weight: bold;">ESTIMATED MONTHLY INSTALLMENT</span>
+                <h2 style="color: #1e2130; margin: 0;">RM {monthly:,.2f}</h2>
+                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+                <p style="margin: 5px 0; color: #1e2130;"><b>Loan Amount:</b> RM {loan:,.2f}</p>
+                <p style="margin: 5px 0; color: #1e2130;"><b>Total Interest:</b> RM {(monthly*months)-loan:,.2f}</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.info(f"💡 Monthly Net Household Income required: RM {monthly/0.35:,.2f}")
+        
+        fig, ax = plt.subplots()
+        ax.pie([loan, (monthly*months)-loan], labels=['Principal', 'Interest'], autopct='%1.1f%%', colors=['#27ae60', '#1e2130'])
         st.pyplot(fig)
