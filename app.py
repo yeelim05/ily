@@ -171,40 +171,57 @@ if mode == "🔮 Price Predictor":
 # ============================================================================
 # PART 2: MARKET RANKINGS (Big Picture Analysis)
 # ============================================================================
-# ============================================================================
-# PART 2: MARKET RANKINGS (Big Picture Analysis)
-# ============================================================================
 elif mode == "📊 Market Rankings":
     st.markdown('<p class="section-title">Regional Market Analysis</p>', unsafe_allow_html=True)
     
     sel_state = st.selectbox("Select State to Analyze", sorted(df[col_map['state']].unique()))
+    state_df = df[df[col_map['state']] == sel_state]
     
-    # 1. Most Expensive Townships
-    st.subheader("💎 Top 10 Most Expensive Townships (Avg Price)")
-    top_10_price = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['price_val'].mean().sort_values(ascending=False).head(10)
+    # ROW 1: Expensive vs Cheap
+    col1, col2 = st.columns(2)
     
-    fig1, ax1 = plt.subplots(figsize=(12, 6)) # Increased width
-    sns.barplot(x=top_10_price.index, y=top_10_price.values, palette="viridis", ax=ax1)
-    plt.xticks(rotation=45, ha='right') # Rotates the text 45 degrees
-    plt.ylabel("Avg Price (RM)")
-    plt.xlabel("Township")
-    st.pyplot(fig1)
-        
-    # 2. Most Active Townships
-    st.subheader("🔥 Top 10 Most Active Townships (Transactions)")
-    top_10_trans = df[df[col_map['state']] == sel_state].groupby(col_map['town'])['trans_val'].sum().sort_values(ascending=False).head(10)
-    
-    fig2, ax2 = plt.subplots(figsize=(12, 6)) # Increased width
-    sns.barplot(x=top_10_trans.index, y=top_10_trans.values, palette="magma", ax=ax2)
-    plt.xticks(rotation=45, ha='right') # Rotates the text 45 degrees
-    plt.ylabel("Total Transactions")
-    plt.xlabel("Township")
-    st.pyplot(fig2)
+    with col1:
+        st.subheader("💎 Top 10 Most Expensive")
+        top_10_price = state_df.groupby(col_map['town'])['price_val'].mean().sort_values(ascending=False).head(10)
+        fig1, ax1 = plt.subplots()
+        sns.barplot(x=top_10_price.values, y=top_10_price.index, palette="viridis", ax=ax1)
+        ax1.set_xlabel("Avg Price (RM)")
+        st.pyplot(fig1)
+
+    with col2:
+        st.subheader("🏷️ Top 10 Most Affordable")
+        # Filtering for townships with at least 1 transaction to avoid outliers
+        low_10_price = state_df.groupby(col_map['town'])['price_val'].mean().sort_values(ascending=True).head(10)
+        fig2, ax2 = plt.subplots()
+        sns.barplot(x=low_10_price.values, y=low_10_price.index, palette="crest", ax=ax2)
+        ax2.set_xlabel("Avg Price (RM)")
+        st.pyplot(fig2)
+
+    # ROW 2: Activity vs Volume
+    st.markdown('<p class="section-title">Transaction Trends</p>', unsafe_allow_html=True)
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.subheader("🔥 Top 10 High Activity (Transactions)")
+        top_10_trans = state_df.groupby(col_map['town'])['trans_val'].sum().sort_values(ascending=False).head(10)
+        fig3, ax3 = plt.subplots()
+        sns.barplot(x=top_10_trans.values, y=top_10_trans.index, palette="magma", ax=ax3)
+        ax3.set_xlabel("Total Transactions")
+        st.pyplot(fig3)
+
+    with col4:
+        st.subheader("📈 Price vs. Transaction Volume")
+        # Scatter plot to see if high-volume areas are cheaper
+        scatter_data = state_df.groupby(col_map['town']).agg({'price_val': 'mean', 'trans_val': 'sum'})
+        fig4, ax4 = plt.subplots()
+        sns.scatterplot(data=scatter_data, x='trans_val', y='price_val', alpha=0.6, ax=ax4, color="#00d4ff")
+        ax4.set_xlabel("Total Transactions")
+        ax4.set_ylabel("Avg Price (RM)")
+        st.pyplot(fig4)
 
     st.markdown('<p class="section-title">District-wise Price Breakdown</p>', unsafe_allow_html=True)
-    area_stats = df[df[col_map['state']] == sel_state].groupby(col_map['area'])['price_val'].agg(['mean', 'count']).rename(columns={'mean': 'Avg Price (RM)', 'count': 'Data Points'})
+    area_stats = state_df.groupby(col_map['area'])['price_val'].agg(['mean', 'count']).rename(columns={'mean': 'Avg Price (RM)', 'count': 'Data Points'})
     st.table(area_stats.sort_values(by='Avg Price (RM)', ascending=False))
-
 # ============================================================================
 # PART 3: MORTGAGE CALCULATOR
 # ============================================================================
