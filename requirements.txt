@@ -1,16 +1,9 @@
-# Core Data Science
 streamlit
 pandas
 numpy
-
-# Visualization
 matplotlib
 seaborn
-
-# Statistics & Science
 scipy
-
-# Machine Learning
 scikit-learn
 joblib
 
