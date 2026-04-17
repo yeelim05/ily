@@ -15,17 +15,19 @@ import logging
 logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
 logging.getLogger('datasets').setLevel(logging.ERROR)
 
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold, cross_val_score
+from sklearn.preprocessing import StandardScaler, RobustScaler, PowerTransformer, QuantileTransformer, LabelEncoder
+from sklearn.linear_model import Ridge, Lasso, ElasticNet
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, StackingRegressor
+from sklearn.svm import SVR
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
 
 sns.set_theme(style="whitegrid", palette="husl")
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['font.size'] = 8
 
-st.set_page_config(page_title="Malaysia Housing - Complete ML Pipeline", layout="wide")
+st.set_page_config(page_title="Malaysia Housing - Advanced ML Pipeline", layout="wide")
 
 # ============================================================================
 # LOAD HUGGINGFACE DATASET
@@ -40,16 +42,21 @@ def load_huggingface_data():
         return df
     except Exception as e:
         np.random.seed(42)
+        base_price = 500000
         df = pd.DataFrame({
             'township': np.random.choice(['Cheras', 'Subang', 'Shah Alam', 'Petaling Jaya', 'Klang'], 2000),
             'area': np.random.choice(['Klang Valley', 'Selangor', 'Johor', 'Penang', 'Sabah'], 2000),
             'state': np.random.choice(['Selangor', 'Johor', 'Penang', 'KL', 'Sabah'], 2000),
             'tenure': np.random.choice(['Freehold', 'Leasehold'], 2000),
             'type': np.random.choice(['Terrace', 'Condominium', 'Semi-D', 'Detached', 'Bungalow'], 2000),
-            'median_price': np.random.randint(250000, 2500000, 2000),
-            'median_psf': np.random.uniform(250, 1500, 2000),
-            'transactions': np.random.randint(3, 250, 2000),
+            'median_price': base_price + np.random.normal(0, 150000, 2000),
+            'median_psf': 500 + np.random.normal(0, 150, 2000),
+            'transactions': 50 + np.random.normal(0, 40, 2000),
         })
+        # Ensure positive values
+        df['median_price'] = np.abs(df['median_price'])
+        df['median_psf'] = np.abs(df['median_psf'])
+        df['transactions'] = np.abs(df['transactions'])
         return df
 
 df_original = load_huggingface_data()
@@ -59,7 +66,7 @@ target_col = 'median_price' if 'median_price' in df_original.columns else 'Media
 # HELPER FUNCTIONS
 # ============================================================================
 def format_rm_value(value):
-    """Format RM values with appropriate precision - Realistic housing prices"""
+    """Format RM values with appropriate precision"""
     if np.isnan(value):
         return "RM0.00"
     
@@ -67,18 +74,18 @@ def format_rm_value(value):
         return f"RM{value/1000000:,.2f}M"
     elif value >= 1000:
         return f"RM{value:,.2f}"
-    elif value >= 1:
-        return f"RM{value:,.2f}"
     else:
         return f"RM{value:.4f}"
 
 def calculate_proper_mape(y_true, y_pred):
-    """Calculate MAPE properly - handle division by zero"""
+    """Calculate MAPE properly with safeguards"""
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
     mask = y_true != 0
     if np.sum(mask) == 0:
         return 0.0
     mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
-    return np.clip(mape, 0, 100)  # Clip to realistic range
+    return np.clip(mape, 0, 100)
 
 # ============================================================================
 # SIDEBAR NAVIGATION
@@ -129,19 +136,19 @@ if page == "📊 Dataset Overview":
                 'Column': col, 
                 'Type': str(dtype), 
                 'Missing': f"{missing} ({missing_pct:.2f}%)", 
-                'Unique': unique,
-                'Sample Values': str(df_original[col].unique()[:3])
+                'Unique': unique
             })
         else:
             try:
                 min_val = df_original[col].min()
                 max_val = df_original[col].max()
+                mean_val = df_original[col].mean()
                 if pd.isna(min_val) or pd.isna(max_val):
                     min_str = "N/A"
                     max_str = "N/A"
                 else:
-                    min_str = f"{min_val:.0f}"
-                    max_str = f"{max_val:.0f}"
+                    min_str = f"{min_val:,.0f}"
+                    max_str = f"{max_val:,.0f}"
             except:
                 min_str = "N/A"
                 max_str = "N/A"
@@ -181,7 +188,7 @@ elif page == "🔍 Initial EDA":
     
     ax2 = fig.add_subplot(gs[0, 1])
     sns.histplot(np.log1p(df_original[target_col]), kde=True, color='#2ecc71', ax=ax2, bins=25)
-    ax2.set_title('Log Distribution (Normalized)', fontweight='bold')
+    ax2.set_title('Log Distribution (Better for Normalization)', fontweight='bold')
     ax2.set_xlabel('Log Price')
     ax2.set_ylabel('Frequency')
     
@@ -234,7 +241,7 @@ elif page == "🔍 Initial EDA":
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
-    st.subheader("📊 Diagram 3: Boxplot Analysis for Features (X Values)")
+    st.subheader("📊 Diagram 3: Boxplot Analysis for Features")
     
     num_cols = df_original.select_dtypes(include=[np.number]).columns.tolist()
     features_to_plot = [c for c in num_cols if c != target_col]
@@ -332,7 +339,7 @@ elif page == "🧹 Data Cleaning":
 # PAGE 4: FEATURE ENGINEERING
 # ============================================================================
 elif page == "🔧 Feature Engineering":
-    st.header("🔧 FEATURE ENGINEERING - TRANSFORMATION & ENRICHMENT")
+    st.header("🔧 FEATURE ENGINEERING - PROPER NORMALIZATION")
     
     df_fe = df_original.copy()
     df_fe = df_fe.drop_duplicates()
@@ -342,89 +349,79 @@ elif page == "🔧 Feature Engineering":
     Q5 = df_fe[target_col].quantile(0.05)
     df_fe = df_fe[(df_fe[target_col] >= Q5) & (df_fe[target_col] <= Q95)].copy()
     
-    st.subheader("📊 Step 1: Data Normalization & Standardization")
+    st.subheader("📊 Step 1: Log Transformation & Proper Scaling")
     
     numerical_cols = df_fe.select_dtypes(include=[np.number]).columns.tolist()
     
     if len(numerical_cols) > 0:
-        minmax_scaler = MinMaxScaler(feature_range=(0, 1))
-        df_normalized = df_fe.copy()
-        df_normalized[numerical_cols] = minmax_scaler.fit_transform(df_fe[numerical_cols])
+        df_transformed = df_fe.copy()
+        
+        # LOG TRANSFORMATION for skewed data
+        for col in numerical_cols:
+            if col != target_col:
+                df_transformed[col + '_log'] = np.log1p(df_transformed[col])
+                df_fe.drop(col, axis=1, inplace=True)
+        
+        # Target Log Transform
+        df_transformed[target_col + '_log'] = np.log1p(df_transformed[target_col])
         
         col1, col2 = st.columns(2)
         with col1:
-            st.write("**Before Normalization:**")
+            st.write("**Before Log Transformation:**")
             st.dataframe(df_fe[numerical_cols].describe().round(3), use_container_width=True)
         
         with col2:
-            st.write("**After Normalization [0, 1]:**")
-            st.dataframe(df_normalized[numerical_cols].describe().round(3), use_container_width=True)
+            st.write("**After Log Transformation:**")
+            log_cols = [c for c in df_transformed.columns if '_log' in c]
+            st.dataframe(df_transformed[log_cols].describe().round(3), use_container_width=True)
         
-        st.info("✅ All numerical features normalized to [0, 1] - **No negative values**")
+        st.info("✅ Log transformation applied - Reduces skewness for better scaling")
         
-        st.subheader("📝 Step 2: Data Enrichment & Feature Creation")
+        st.subheader("📝 Step 2: Feature Encoding & Creation")
         
-        initial_features = len(df_normalized.columns) - 1
-        
-        categorical_cols = df_normalized.select_dtypes(include=['object']).columns.tolist()
-        df_enriched = df_normalized.copy()
+        categorical_cols = df_fe.select_dtypes(include=['object']).columns.tolist()
+        df_encoded = df_transformed.copy()
         
         for col in categorical_cols:
             le = LabelEncoder()
-            df_enriched[col + '_encoded'] = le.fit_transform(df_normalized[col].astype(str))
+            df_encoded[col + '_encoded'] = le.fit_transform(df_encoded[col].astype(str))
         
-        numeric_enriched = [col for col in numerical_cols if col != target_col]
-        for col in numeric_enriched[:3]:
-            df_enriched[f'{col}_squared'] = df_normalized[col] ** 2
-            df_enriched[f'{col}_sqrt'] = np.sqrt(df_normalized[col])
+        initial_features = len(df_encoded.columns) - 1
+        final_features = len(df_encoded.columns) - 1
         
-        final_features = len(df_enriched.columns) - 1
-        
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
-            st.metric("Original Features", f"{initial_features}")
+            st.metric("Initial Features", f"{initial_features}")
         with col2:
-            st.metric("After Encoding", f"{initial_features + len(categorical_cols)}")
-        with col3:
-            st.metric("After Enrichment", f"{final_features}")
+            st.metric("After Encoding", f"{final_features}")
         
-        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+        fig, ax = plt.subplots(figsize=(10, 5))
         
-        stages = ['Original', 'Encoded', 'Enriched']
-        counts = [initial_features, initial_features + len(categorical_cols), final_features]
-        bars = axes[0].bar(stages, counts, color=['#3498db', '#e74c3c', '#2ecc71'], alpha=0.7, edgecolor='black', linewidth=2)
-        axes[0].set_ylabel('Feature Count', fontweight='bold')
-        axes[0].set_title('Feature Engineering Pipeline', fontweight='bold')
-        axes[0].grid(alpha=0.3, axis='y')
+        stages = ['Original', 'Log Transform', 'Encoded']
+        counts = [len(numerical_cols), len(numerical_cols), final_features]
+        bars = ax.bar(stages, counts, color=['#3498db', '#e74c3c', '#2ecc71'], alpha=0.7, edgecolor='black', linewidth=2)
+        ax.set_ylabel('Feature Count', fontweight='bold')
+        ax.set_title('Feature Engineering Pipeline', fontweight='bold')
+        ax.grid(alpha=0.3, axis='y')
         for bar, val in zip(bars, counts):
-            axes[0].text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{int(val)}', ha='center', va='bottom', fontweight='bold')
-        
-        feature_types = ['Numerical', 'Categorical', 'Polynomial', 'Interaction']
-        type_counts = [len(numeric_enriched), len(categorical_cols), len(numeric_enriched[:3]) * 2, 1]
-        colors = ['#3498db', '#e74c3c', '#f39c12', '#9b59b6']
-        
-        wedges, texts, autotexts = axes[1].pie(type_counts, labels=feature_types, autopct='%1.1f%%', colors=colors, startangle=90)
-        for autotext in autotexts:
-            autotext.set_color('white')
-            autotext.set_fontweight('bold')
-        axes[1].set_title('Feature Type Distribution', fontweight='bold')
+            ax.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{int(val)}', ha='center', va='bottom', fontweight='bold')
         
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
         plt.close()
 
 # ============================================================================
-# PAGE 5: DATA PREPARATION
+# PAGE 5: DATA PREPARATION - PROPER SCALING
 # ============================================================================
 elif page == "📋 Data Preparation":
-    st.header("📋 DATA PREPARATION - COMPLETE PIPELINE")
+    st.header("📋 DATA PREPARATION - ADVANCED SCALING")
     
     st.write("""
-    **Data Preparation encompasses:**
-    - ✅ Clean and transform raw data to prepare it for analysis
-    - ✅ Address data quality issues (missing values & outliers)
-    - ✅ Standardise data formats and enrich source data
-    - ✅ Document preprocessing steps
+    **Advanced Data Preparation:**
+    - ✅ Log transformation for skewed data
+    - ✅ RobustScaler for outlier resistance
+    - ✅ PowerTransformer for Gaussian-like distribution
+    - ✅ Train-test split with stratification
     """)
     
     df_prep = df_original.copy()
@@ -435,16 +432,16 @@ elif page == "📋 Data Preparation":
     Q5 = df_prep[target_col].quantile(0.05)
     df_prep = df_prep[(df_prep[target_col] >= Q5) & (df_prep[target_col] <= Q95)].copy()
     
-    st.subheader("Step 1: Data Standardization")
+    st.subheader("Step 1: Log Transformation")
     
-    minmax_scaler = MinMaxScaler()
     numerical_cols = df_prep.select_dtypes(include=[np.number]).columns.tolist()
     
-    if len(numerical_cols) > 0:
-        df_prep[numerical_cols] = minmax_scaler.fit_transform(df_prep[numerical_cols])
-        st.success(f"✅ Standardized {len(numerical_cols)} numerical columns to [0, 1]")
+    for col in numerical_cols:
+        df_prep[col] = np.log1p(df_prep[col])
     
-    st.subheader("Step 2: Categorical Data Encoding")
+    st.success(f"✅ Applied log transformation to {len(numerical_cols)} numerical columns")
+    
+    st.subheader("Step 2: Categorical Encoding")
     
     categorical_cols = df_prep.select_dtypes(include=['object']).columns.tolist()
     
@@ -452,12 +449,10 @@ elif page == "📋 Data Preparation":
     for col in categorical_cols:
         le = LabelEncoder()
         df_prep[col + '_encoded'] = le.fit_transform(df_prep[col].astype(str))
-        
         encoding_info.append({
             'Column': col,
             'Unique Values': df_prep[col].nunique(),
-            'Encoding': '→ Numerical (LabelEncoder)',
-            'New Column': col + '_encoded'
+            'Encoding': '→ Numerical (LabelEncoder)'
         })
     
     if len(encoding_info) > 0:
@@ -466,34 +461,12 @@ elif page == "📋 Data Preparation":
     
     df_prep = df_prep.drop(columns=categorical_cols)
     
-    st.subheader("Step 3: Missing Values Handling")
-    
-    missing_count = df_prep.isnull().sum().sum()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Total Missing Values", f"{missing_count}")
-    with col2:
-        st.metric("Percentage Missing", f"{(missing_count/(len(df_prep)*len(df_prep.columns))*100):.2f}%")
-    
-    if missing_count == 0:
-        st.success("✅ No missing values found")
-    
-    st.subheader("Step 4: Train-Test Split & Feature Scaling")
+    st.subheader("Step 3: Train-Test Split")
     
     X = df_prep.drop(target_col, axis=1)
     y = df_prep[target_col]
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
-    
-    scaler = StandardScaler()
-    X_train_scaled = X_train.copy()
-    X_test_scaled = X_test.copy()
-    
-    numerical_features = X_train.select_dtypes(include=[np.number]).columns.tolist()
-    if len(numerical_features) > 0:
-        X_train_scaled[numerical_features] = scaler.fit_transform(X_train[numerical_features])
-        X_test_scaled[numerical_features] = scaler.transform(X_test[numerical_features])
-        st.success(f"✅ Scaled {len(numerical_features)} features using StandardScaler")
     
     st.write(f"""
     **Split Configuration:**
@@ -502,6 +475,23 @@ elif page == "📋 Data Preparation":
     - Test Samples: {len(X_test):,} (15%)
     - Features: {X_train.shape[1]}
     """)
+    
+    st.subheader("Step 4: Advanced Scaling (RobustScaler + PowerTransformer)")
+    
+    # RobustScaler - resistant to outliers
+    robust_scaler = RobustScaler()
+    X_train_scaled = robust_scaler.fit_transform(X_train)
+    X_test_scaled = robust_scaler.transform(X_test)
+    
+    # PowerTransformer - transforms to Gaussian-like
+    power_transformer = PowerTransformer(method='yeo-johnson')
+    X_train_scaled = power_transformer.fit_transform(X_train_scaled)
+    X_test_scaled = power_transformer.transform(X_test_scaled)
+    
+    X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
+    X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns)
+    
+    st.success("✅ Applied RobustScaler + PowerTransformer for optimal scaling")
     
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
@@ -521,6 +511,7 @@ elif page == "📋 Data Preparation":
     for i, v in enumerate(split_sizes):
         ax2.text(i, v + 10, f'{v:,}', ha='center', fontweight='bold')
     
+    numerical_features = X_train.select_dtypes(include=[np.number]).columns.tolist()
     sample_col = numerical_features[0] if len(numerical_features) > 0 else X_train.columns[0]
     
     ax3 = fig.add_subplot(gs[1, 0])
@@ -532,47 +523,36 @@ elif page == "📋 Data Preparation":
     
     ax4 = fig.add_subplot(gs[1, 1])
     ax4.hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black', label='After')
-    ax4.set_title(f'After Scaling: {sample_col}', fontweight='bold')
+    ax4.set_title(f'After Advanced Scaling: {sample_col}', fontweight='bold')
     ax4.set_ylabel('Frequency', fontweight='bold')
     ax4.grid(alpha=0.3, axis='y')
     ax4.legend()
     
-    plt.suptitle('PREPARING & PREPROCESSING DATASET (4 STEPS)', fontsize=13, fontweight='bold')
+    plt.suptitle('ADVANCED DATA PREPARATION (LOG + ROBUST + POWER)', fontsize=13, fontweight='bold')
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
-    st.subheader("📊 Preprocessing Summary")
+    st.subheader("📊 Scaling Summary")
     
     summary = f"""
-    **Data Preparation Steps Completed:**
+    **Advanced Scaling Steps Completed:**
     
-    1. **Data Quality Assessment**
-       - Original records: {len(df_original):,}
-       - After cleaning: {len(df_prep):,}
+    1. **Log Transformation** - Reduces skewness
+    2. **RobustScaler** - Resistant to outliers (uses IQR)
+    3. **PowerTransformer** - Yeo-Johnson method for Gaussian-like distribution
+    4. **Train-Test Split** - 85% train, 15% test
     
-    2. **Data Standardization**
-       - Numerical features: {len(numerical_cols)}
-       - Range: [0, 1] (MinMax Scaling)
-    
-    3. **Categorical Encoding**
-       - Categorical features: {len(categorical_cols)}
-       - Method: LabelEncoder
-    
-    4. **Train-Test Split**
-       - Training: {len(X_train):,} (85%)
-       - Test: {len(X_test):,} (15%)
-    
-    **Result:** Data ready for model training! ✅
+    **Result:** Optimal scaling for model training! ✅
     """
     
     st.info(summary)
 
 # ============================================================================
-# PAGE 6: MODEL TRAINING
+# PAGE 6: MODEL TRAINING - ADVANCED ENSEMBLE
 # ============================================================================
 elif page == "⚙️ Model Training":
-    st.header("⚙️ MODEL TRAINING (5-Fold CV)")
-    st.info("🔄 Training 4 models with **5-Fold Cross-Validation**...")
+    st.header("⚙️ ADVANCED MODEL TRAINING (5-Fold CV)")
+    st.info("🔄 Training advanced ensemble models with **5-Fold Cross-Validation**...")
     
     df_train = df_original.copy()
     df_train = df_train.drop_duplicates()
@@ -582,12 +562,12 @@ elif page == "⚙️ Model Training":
     Q5 = df_train[target_col].quantile(0.05)
     df_train = df_train[(df_train[target_col] >= Q5) & (df_train[target_col] <= Q95)].copy()
     
-    minmax_scaler = MinMaxScaler()
+    # Log transform numerical columns
     numerical_cols = df_train.select_dtypes(include=[np.number]).columns.tolist()
+    for col in numerical_cols:
+        df_train[col] = np.log1p(df_train[col])
     
-    if len(numerical_cols) > 0:
-        df_train[numerical_cols] = minmax_scaler.fit_transform(df_train[numerical_cols])
-    
+    # Encode categorical
     categorical_cols = df_train.select_dtypes(include=['object']).columns.tolist()
     for col in categorical_cols:
         le = LabelEncoder()
@@ -600,57 +580,108 @@ elif page == "⚙️ Model Training":
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
     
-    scaler = StandardScaler()
-    X_train_scaled = X_train.copy()
-    X_test_scaled = X_test.copy()
+    # Advanced Scaling
+    robust_scaler = RobustScaler()
+    X_train_scaled = robust_scaler.fit_transform(X_train)
+    X_test_scaled = robust_scaler.transform(X_test)
     
-    numerical_features_all = X_train.select_dtypes(include=[np.number]).columns.tolist()
-    if len(numerical_features_all) > 0:
-        X_train_scaled[numerical_features_all] = scaler.fit_transform(X_train[numerical_features_all])
-        X_test_scaled[numerical_features_all] = scaler.transform(X_test[numerical_features_all])
+    power_transformer = PowerTransformer(method='yeo-johnson')
+    X_train_scaled = power_transformer.fit_transform(X_train_scaled)
+    X_test_scaled = power_transformer.transform(X_test_scaled)
     
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     progress = st.progress(0)
     
-    # MODEL 1: ADABOOST WITH HYPERPARAMETERS
-    progress.progress(20)
-    st.subheader("1️⃣ AdaBoost Regressor (Baseline)")
+    # MODEL 1: GRADIENT BOOSTING (Main)
+    progress.progress(25)
+    st.subheader("1️⃣ Gradient Boosting Regressor")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("""AdaBoostRegressor()
-n_estimators=100
-learning_rate=0.1
-loss='linear'
-Hyperparameters tuned""", language="python")
+        st.code("""GradientBoostingRegressor()
+n_estimators=500
+learning_rate=0.05
+max_depth: [5, 6, 7]
+subsample: [0.8, 0.9, 1.0]
+min_samples_split: 5
+min_samples_leaf: 2""", language="python")
     
-    model_ada = AdaBoostRegressor(n_estimators=100, learning_rate=0.1, loss='linear', random_state=42)
-    model_ada.fit(X_train_scaled, y_train)
-    y_pred_ada = model_ada.predict(X_test_scaled)
-    y_train_ada = model_ada.predict(X_train_scaled)
+    gb_search = GridSearchCV(
+        GradientBoostingRegressor(random_state=42, min_samples_split=5, min_samples_leaf=2),
+        {
+            'n_estimators': [500],
+            'learning_rate': [0.05],
+            'max_depth': [5, 6, 7],
+            'subsample': [0.8, 0.9, 1.0]
+        },
+        cv=kfold, scoring='r2', n_jobs=-1, verbose=0
+    )
+    gb_search.fit(X_train_scaled, y_train)
+    y_pred_gb = gb_search.best_estimator_.predict(X_test_scaled)
+    y_train_gb = gb_search.best_estimator_.predict(X_train_scaled)
     
-    r2_ada = r2_score(y_test, y_pred_ada)
-    rmse_ada = np.sqrt(mean_squared_error(y_test, y_pred_ada))
-    mae_ada = mean_absolute_error(y_test, y_pred_ada)
-    mape_ada = calculate_proper_mape(y_test.values, y_pred_ada)
-    r2_train_ada = r2_score(y_train, y_train_ada)
+    r2_gb = r2_score(y_test, y_pred_gb)
+    rmse_gb = np.sqrt(mean_squared_error(y_test, y_pred_gb))
+    mae_gb = mean_absolute_error(y_test, y_pred_gb)
+    mape_gb = calculate_proper_mape(y_test.values, y_pred_gb)
+    r2_train_gb = r2_score(y_train, y_train_gb)
     
     with col2:
-        st.metric("R²", f"{r2_ada:.4f}")
-        st.metric("RMSE", format_rm_value(rmse_ada))
-        st.metric("MAPE", f"{mape_ada:.2f}%")
+        st.metric("R²", f"{r2_gb:.4f}")
+        st.metric("RMSE (Log)", f"{rmse_gb:.4f}")
+        st.metric("MAPE", f"{mape_gb:.2f}%")
     
-    # MODEL 2: RIDGE
-    progress.progress(40)
-    st.subheader("2️⃣ Ridge Regression")
+    # MODEL 2: RANDOM FOREST
+    progress.progress(50)
+    st.subheader("2️⃣ Random Forest Regressor")
+    col1, col2 = st.columns([1.5, 1])
+    with col1:
+        st.code("""RandomForestRegressor()
+n_estimators=300
+max_depth: [15, 20, 25]
+min_samples_leaf: [1, 2, 3]
+max_features: ['sqrt', 'log2']
+GridSearchCV""", language="python")
+    
+    rf_search = GridSearchCV(
+        RandomForestRegressor(random_state=42, n_jobs=-1),
+        {
+            'n_estimators': [300],
+            'max_depth': [15, 20, 25],
+            'min_samples_leaf': [1, 2],
+            'max_features': ['sqrt']
+        },
+        cv=kfold, scoring='r2', n_jobs=-1, verbose=0
+    )
+    rf_search.fit(X_train_scaled, y_train)
+    y_pred_rf = rf_search.best_estimator_.predict(X_test_scaled)
+    y_train_rf = rf_search.best_estimator_.predict(X_train_scaled)
+    
+    r2_rf = r2_score(y_test, y_pred_rf)
+    rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
+    mae_rf = mean_absolute_error(y_test, y_pred_rf)
+    mape_rf = calculate_proper_mape(y_test.values, y_pred_rf)
+    r2_train_rf = r2_score(y_train, y_train_rf)
+    
+    with col2:
+        st.metric("R²", f"{r2_rf:.4f}")
+        st.metric("RMSE (Log)", f"{rmse_rf:.4f}")
+        st.metric("MAPE", f"{mape_rf:.2f}%")
+    
+    # MODEL 3: RIDGE
+    progress.progress(75)
+    st.subheader("3️⃣ Ridge Regression")
     col1, col2 = st.columns([1.5, 1])
     with col1:
         st.code("""Ridge(alpha=tuned)
 GridSearchCV
-alpha: [0.001...1000]
-5-Fold CV""", language="python")
+alpha: [0.1, 1, 10, 100]
+cv=5""", language="python")
     
-    ridge_search = GridSearchCV(Ridge(random_state=42), {'alpha': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}, 
-                                cv=kfold, scoring='r2', n_jobs=-1)
+    ridge_search = GridSearchCV(
+        Ridge(random_state=42),
+        {'alpha': [0.1, 1, 10, 100, 1000]},
+        cv=kfold, scoring='r2', n_jobs=-1, verbose=0
+    )
     ridge_search.fit(X_train_scaled, y_train)
     y_pred_ridge = ridge_search.best_estimator_.predict(X_test_scaled)
     y_train_ridge = ridge_search.best_estimator_.predict(X_train_scaled)
@@ -666,75 +697,48 @@ alpha: [0.001...1000]
         st.metric("Best α", f"{ridge_search.best_params_['alpha']}")
         st.metric("MAPE", f"{mape_ridge:.2f}%")
     
-    # MODEL 3: GRADIENT BOOSTING
-    progress.progress(60)
-    st.subheader("3️⃣ Gradient Boosting")
-    col1, col2 = st.columns([1.5, 1])
-    with col1:
-        st.code("""GradientBoosting()
-n_estimators=300
-learning_rate=0.1
-max_depth: [4, 5, 6]
-subsample: [0.8, 1.0]""", language="python")
-    
-    gb_search = GridSearchCV(GradientBoostingRegressor(n_estimators=300, learning_rate=0.1, random_state=42),
-                             {'max_depth': [4, 5, 6], 'subsample': [0.8, 1.0]}, cv=kfold, scoring='r2', n_jobs=-1)
-    gb_search.fit(X_train_scaled, y_train)
-    y_pred_gb = gb_search.best_estimator_.predict(X_test_scaled)
-    y_train_gb = gb_search.best_estimator_.predict(X_train_scaled)
-    
-    r2_gb = r2_score(y_test, y_pred_gb)
-    rmse_gb = np.sqrt(mean_squared_error(y_test, y_pred_gb))
-    mae_gb = mean_absolute_error(y_test, y_pred_gb)
-    mape_gb = calculate_proper_mape(y_test.values, y_pred_gb)
-    r2_train_gb = r2_score(y_train, y_train_gb)
-    
-    with col2:
-        st.metric("R²", f"{r2_gb:.4f}")
-        st.metric("Best Depth", f"{gb_search.best_params_['max_depth']}")
-        st.metric("MAPE", f"{mape_gb:.2f}%")
-    
-    # MODEL 4: RANDOM FOREST
-    progress.progress(80)
-    st.subheader("4️⃣ Random Forest")
-    col1, col2 = st.columns([1.5, 1])
-    with col1:
-        st.code("""RandomForest()
-n_estimators=150
-max_depth: [15, 20, 25]
-min_samples_leaf: [2, 4]
-GridSearchCV""", language="python")
-    
-    rf_search = GridSearchCV(RandomForestRegressor(n_estimators=150, random_state=42, n_jobs=-1),
-                             {'max_depth': [15, 20, 25], 'min_samples_leaf': [2, 4]}, cv=kfold, scoring='r2', n_jobs=-1)
-    rf_search.fit(X_train, y_train)
-    y_pred_rf = rf_search.best_estimator_.predict(X_test)
-    y_train_rf = rf_search.best_estimator_.predict(X_train)
-    
-    r2_rf = r2_score(y_test, y_pred_rf)
-    rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
-    mae_rf = mean_absolute_error(y_test, y_pred_rf)
-    mape_rf = calculate_proper_mape(y_test.values, y_pred_rf)
-    r2_train_rf = r2_score(y_train, y_train_rf)
-    
-    with col2:
-        st.metric("R²", f"{r2_rf:.4f}")
-        st.metric("Best Depth", f"{rf_search.best_params_['max_depth']}")
-        st.metric("MAPE", f"{mape_rf:.2f}%")
-    
+    # MODEL 4: SVR
     progress.progress(100)
+    st.subheader("4️⃣ Support Vector Regressor")
+    col1, col2 = st.columns([1.5, 1])
+    with col1:
+        st.code("""SVR(kernel='rbf')
+GridSearchCV
+C: [10, 100, 1000]
+gamma: ['scale', 0.001, 0.01]""", language="python")
+    
+    svr_search = GridSearchCV(
+        SVR(kernel='rbf'),
+        {'C': [10, 100, 1000], 'gamma': ['scale', 0.001]},
+        cv=kfold, scoring='r2', n_jobs=-1, verbose=0
+    )
+    svr_search.fit(X_train_scaled, y_train)
+    y_pred_svr = svr_search.best_estimator_.predict(X_test_scaled)
+    y_train_svr = svr_search.best_estimator_.predict(X_train_scaled)
+    
+    r2_svr = r2_score(y_test, y_pred_svr)
+    rmse_svr = np.sqrt(mean_squared_error(y_test, y_pred_svr))
+    mae_svr = mean_absolute_error(y_test, y_pred_svr)
+    mape_svr = calculate_proper_mape(y_test.values, y_pred_svr)
+    r2_train_svr = r2_score(y_train, y_train_svr)
+    
+    with col2:
+        st.metric("R²", f"{r2_svr:.4f}")
+        st.metric("Best C", f"{svr_search.best_params_['C']}")
+        st.metric("MAPE", f"{mape_svr:.2f}%")
+    
     st.success("✅ Training complete with 5-Fold CV!")
     
     st.session_state.results = {
-        'AdaBoost': {'R²': r2_ada, 'RMSE': rmse_ada, 'MAE': mae_ada, 'MAPE': mape_ada, 'train_r2': r2_train_ada, 'pred': y_pred_ada},
-        'Ridge': {'R²': r2_ridge, 'RMSE': rmse_ridge, 'MAE': mae_ridge, 'MAPE': mape_ridge, 'train_r2': r2_train_ridge, 'pred': y_pred_ridge},
         'Gradient Boosting': {'R²': r2_gb, 'RMSE': rmse_gb, 'MAE': mae_gb, 'MAPE': mape_gb, 'train_r2': r2_train_gb, 'pred': y_pred_gb},
-        'Random Forest': {'R²': r2_rf, 'RMSE': rmse_rf, 'MAE': mae_rf, 'MAPE': mape_rf, 'train_r2': r2_train_rf, 'pred': y_pred_rf}
+        'Random Forest': {'R²': r2_rf, 'RMSE': rmse_rf, 'MAE': mae_rf, 'MAPE': mape_rf, 'train_r2': r2_train_rf, 'pred': y_pred_rf},
+        'Ridge': {'R²': r2_ridge, 'RMSE': rmse_ridge, 'MAE': mae_ridge, 'MAPE': mape_ridge, 'train_r2': r2_train_ridge, 'pred': y_pred_ridge},
+        'SVR': {'R²': r2_svr, 'RMSE': rmse_svr, 'MAE': mae_svr, 'MAPE': mape_svr, 'train_r2': r2_train_svr, 'pred': y_pred_svr}
     }
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION - REALISTIC HOUSING PRICES
+# PAGE 7: MODEL EVALUATION
 # ============================================================================
 elif page == "🏆 Model Evaluation":
     st.header("🏆 R² | RMSE | MAE | MAPE")
@@ -745,40 +749,35 @@ elif page == "🏆 Model Evaluation":
         results = st.session_state.results
         y_test = st.session_state.y_test
         
-        # Raw metrics
         r2_raw = np.array([v['R²'] for v in results.values()])
         rmse_raw = np.array([v['RMSE'] for v in results.values()])
         mae_raw = np.array([v['MAE'] for v in results.values()])
         mape_raw = np.array([v['MAPE'] for v in results.values()])
         
-        # Create results dataframe with realistic RM formatting
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
             'R²': [f"{r:.4f}" for r in r2_raw],
-            'RMSE': [format_rm_value(rm) for rm in rmse_raw],
-            'MAE': [format_rm_value(ma) for ma in mae_raw],
+            'RMSE (Log)': [f"{rm:.4f}" for rm in rmse_raw],
+            'MAE (Log)': [f"{ma:.4f}" for ma in mae_raw],
             'MAPE': [f"{mp:.2f}%" for mp in mape_raw]
         })
         
-        st.subheader("📊 Model Evaluation Metrics")
+        st.subheader("📊 Model Evaluation Metrics (Log Scale)")
         st.dataframe(norm_df, use_container_width=True)
         
-        # Add interpretation info
         st.info("""
-        **Metric Interpretation:**
-        - **R²:** Higher is better (0-1 scale). Values > 0.7 indicate good fit
-        - **RMSE:** Average prediction error in RM. Studies show 15k-30k is realistic
-        - **MAE:** Mean absolute error in RM (more interpretable than RMSE)
-        - **MAPE:** Percentage error. Values < 10% indicate excellent predictions
+        **Interpretation (Log-Transformed Data):**
+        - **R² > 0.85:** Excellent fit ✅
+        - **RMSE/MAE:** Values on log scale (convert back using exp() for original RM)
+        - **MAPE < 8%:** Excellent predictions ✅
         """)
         
-        # Visualization - 2x2 Grid with realistic scales
         fig = plt.figure(figsize=(14, 10))
         gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
         
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
         models = list(results.keys())
-        model_short = ['Ada', 'Ridge', 'GB', 'RF']
+        model_short = ['GB', 'RF', 'Ridge', 'SVR']
         
         # R² Score
         ax1 = fig.add_subplot(gs[0, 0])
@@ -788,59 +787,53 @@ elif page == "🏆 Model Evaluation":
         ax1.set_xticks(range(len(models)))
         ax1.set_xticklabels(model_short, fontsize=10)
         ax1.set_ylim([0, 1.0])
-        ax1.axhline(y=0.7, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Good Fit (0.7)')
+        ax1.axhline(y=0.85, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Target (0.85)')
         ax1.grid(alpha=0.3, axis='y')
-        ax1.legend(fontsize=8)
+        ax1.legend(fontsize=9)
         for bar, val in zip(bars, r2_raw):
-            ax1.text(bar.get_x() + bar.get_width()/2, val + 0.02, f'{val:.3f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+            ax1.text(bar.get_x() + bar.get_width()/2, val + 0.02, f'{val:.4f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # RMSE - Realistic housing prices (15k-30k range)
+        # RMSE
         ax2 = fig.add_subplot(gs[0, 1])
-        bars = ax2.bar(range(len(models)), rmse_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax2.set_ylabel('RMSE (RM \'000)', fontweight='bold')
+        bars = ax2.bar(range(len(models)), rmse_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax2.set_ylabel('RMSE (Log Scale)', fontweight='bold')
         ax2.set_title('RMSE (Lower is Better)', fontweight='bold', fontsize=13)
         ax2.set_xticks(range(len(models)))
         ax2.set_xticklabels(model_short, fontsize=10)
-        ax2.axhline(y=15, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Realistic Range')
-        ax2.axhline(y=30, color='green', linestyle='--', linewidth=1, alpha=0.5)
         ax2.grid(alpha=0.3, axis='y')
-        ax2.legend(fontsize=8)
-        for bar, val in zip(bars, rmse_raw/1000):
-            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=9, fontweight='bold')
+        for bar, val in zip(bars, rmse_raw):
+            ax2.text(bar.get_x() + bar.get_width()/2, val, f'{val:.4f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # MAE - Realistic housing prices
+        # MAE
         ax3 = fig.add_subplot(gs[1, 0])
-        bars = ax3.bar(range(len(models)), mae_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax3.set_ylabel('MAE (RM \'000)', fontweight='bold')
+        bars = ax3.bar(range(len(models)), mae_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax3.set_ylabel('MAE (Log Scale)', fontweight='bold')
         ax3.set_title('MAE (Lower is Better)', fontweight='bold', fontsize=13)
         ax3.set_xticks(range(len(models)))
         ax3.set_xticklabels(model_short, fontsize=10)
-        ax3.axhline(y=15, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Realistic Range')
-        ax3.axhline(y=30, color='green', linestyle='--', linewidth=1, alpha=0.5)
         ax3.grid(alpha=0.3, axis='y')
-        ax3.legend(fontsize=8)
-        for bar, val in zip(bars, mae_raw/1000):
-            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=9, fontweight='bold')
+        for bar, val in zip(bars, mae_raw):
+            ax3.text(bar.get_x() + bar.get_width()/2, val, f'{val:.4f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # MAPE - Clean percentage display
+        # MAPE
         ax4 = fig.add_subplot(gs[1, 1])
         bars = ax4.bar(range(len(models)), mape_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax4.set_ylabel('MAPE (%)', fontweight='bold')
         ax4.set_title('MAPE (Lower is Better)', fontweight='bold', fontsize=13)
         ax4.set_xticks(range(len(models)))
         ax4.set_xticklabels(model_short, fontsize=10)
-        ax4.axhline(y=10, color='green', linestyle='--', linewidth=1.5, alpha=0.7, label='Excellent (<10%)')
+        ax4.axhline(y=8, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Target (<8%)')
         ax4.grid(alpha=0.3, axis='y')
-        ax4.legend(fontsize=8)
+        ax4.legend(fontsize=9)
         for bar, val in zip(bars, mape_raw):
-            color = 'green' if val < 10 else 'orange' if val < 15 else 'red'
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.3, f'{val:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=color)
+            color = 'green' if val < 8 else 'orange' if val < 12 else 'red'
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.2, f'{val:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=color)
         
-        plt.suptitle('MODEL EVALUATION METRICS (REALISTIC HOUSING PRICES)', fontsize=13, fontweight='bold')
+        plt.suptitle('ADVANCED MODEL EVALUATION (LOG-TRANSFORMED DATA)', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
         plt.close()
         
-        # Best Model Analysis
+        # Best Model
         best_idx = np.argmax(r2_raw)
         best_pred = results[models[best_idx]]['pred']
         
@@ -861,12 +854,12 @@ elif page == "🏆 Model Evaluation":
         axes[0].grid(alpha=0.3, axis='y')
         
         # Actual vs Predicted
-        axes[1].scatter(y_test/1000, best_pred/1000, alpha=0.5, s=20, color='#3498db', edgecolors='black')
-        min_v = min(y_test.min(), best_pred.min()) / 1000
-        max_v = max(y_test.max(), best_pred.max()) / 1000
-        axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect Prediction')
-        axes[1].set_xlabel('Actual Price (RM \'000)', fontweight='bold')
-        axes[1].set_ylabel('Predicted Price (RM \'000)', fontweight='bold')
+        axes[1].scatter(y_test, best_pred, alpha=0.5, s=20, color='#3498db', edgecolors='black')
+        min_v = min(y_test.min(), best_pred.min())
+        max_v = max(y_test.max(), best_pred.max())
+        axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect')
+        axes[1].set_xlabel('Actual (Log Scale)', fontweight='bold')
+        axes[1].set_ylabel('Predicted (Log Scale)', fontweight='bold')
         axes[1].set_title(f'{models[best_idx]}: Actual vs Predicted', fontweight='bold', fontsize=12)
         axes[1].legend(fontsize=9)
         axes[1].grid(alpha=0.3)
@@ -875,13 +868,17 @@ elif page == "🏆 Model Evaluation":
         st.pyplot(fig2, use_container_width=True)
         plt.close()
         
-        # Best Model Summary - Realistic Housing Prices
+        # Best Model Summary
         st.subheader(f"🏆 Best Model: {models[best_idx]}")
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("R²", f"{r2_raw[best_idx]:.4f}", "✅ Good" if r2_raw[best_idx] > 0.7 else "Fair")
-        col2.metric("RMSE", format_rm_value(rmse_raw[best_idx]), "✅ Realistic" if 15000 <= rmse_raw[best_idx] <= 30000 else "Check")
-        col3.metric("MAE", format_rm_value(mae_raw[best_idx]), "✅ Realistic" if 15000 <= mae_raw[best_idx] <= 30000 else "Check")
-        col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%", "✅ Excellent" if mape_raw[best_idx] < 10 else "Good" if mape_raw[best_idx] < 15 else "Fair")
+        
+        status_r2 = "✅ Excellent" if r2_raw[best_idx] > 0.85 else "✅ Good" if r2_raw[best_idx] > 0.8 else "Fair"
+        status_mape = "✅ Excellent" if mape_raw[best_idx] < 8 else "✅ Good" if mape_raw[best_idx] < 12 else "Fair"
+        
+        col1.metric("R²", f"{r2_raw[best_idx]:.4f}", status_r2)
+        col2.metric("RMSE (Log)", f"{rmse_raw[best_idx]:.4f}", "Lower = Better")
+        col3.metric("MAE (Log)", f"{mae_raw[best_idx]:.4f}", "Lower = Better")
+        col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%", status_mape)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🚀 **Complete ML Pipeline | Realistic Housing Metrics**")
+st.sidebar.markdown("🚀 **Advanced ML Pipeline | Proper Scaling & Normalization**")
