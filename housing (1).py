@@ -22,11 +22,60 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
 
+import pickle
+from pathlib import Path
+import joblib
+
 sns.set_theme(style="whitegrid", palette="husl")
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['font.size'] = 8
 
 st.set_page_config(page_title="Malaysia Housing - Advanced ML Pipeline", layout="wide")
+
+# ============================================================================
+# MODELS DIRECTORY
+# ============================================================================
+MODELS_DIR = Path('models')
+MODELS_DIR.mkdir(exist_ok=True)
+
+# ============================================================================
+# SAVE/LOAD FUNCTIONS
+# ============================================================================
+def save_model_pipeline_fixed(model_name, model, scalers):
+    """Save model and scalers - Fixed version without compression issues"""
+    try:
+        model_path = MODELS_DIR / f"{model_name}_model.joblib"
+        scalers_path = MODELS_DIR / f"{model_name}_scalers.pkl"
+        
+        joblib.dump(model, model_path, compress=False)
+        
+        with open(scalers_path, 'wb') as f:
+            pickle.dump(scalers, f, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        model_size_mb = model_path.stat().st_size / (1024**2)
+        print(f"✅ Saved: {model_path} ({model_size_mb:.2f} MB)")
+        print(f"✅ Saved: {scalers_path}")
+    except Exception as e:
+        print(f"❌ Error saving model: {e}")
+
+def load_model_pipeline_fixed(model_name):
+    """Load model and scalers - Fixed version"""
+    try:
+        model_path = MODELS_DIR / f"{model_name}_model.joblib"
+        scalers_path = MODELS_DIR / f"{model_name}_scalers.pkl"
+        
+        model = joblib.load(model_path)
+        
+        with open(scalers_path, 'rb') as f:
+            scalers = pickle.load(f)
+        
+        model_size_mb = model_path.stat().st_size / (1024**2)
+        print(f"✅ Loaded: {model_path} ({model_size_mb:.2f} MB)")
+        print(f"✅ Loaded: {scalers_path}")
+        return model, scalers
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        return None, None
 
 # ============================================================================
 # LOAD HUGGINGFACE DATASET
@@ -95,7 +144,8 @@ page = st.sidebar.radio("📍 Navigation", [
     "🔧 Feature Engineering",
     "📋 Data Preparation",
     "⚙️ Model Training",
-    "🏆 Model Evaluation"
+    "🏆 Model Evaluation",
+    "💾 Download Models"
 ])
 
 st.sidebar.markdown("---")
@@ -106,6 +156,8 @@ st.sidebar.info(f"""
 📊 **Rows:** {df_original.shape[0]:,}
 📋 **Columns:** {df_original.shape[1]}
 🎯 **Target:** {target_col}
+
+📁 **Models Directory:** {MODELS_DIR.absolute()}
 """)
 
 # ============================================================================
@@ -300,16 +352,17 @@ elif page == "🧹 Data Cleaning":
     for bar, val in zip(bars, counts):
         axes[0, 0].text(bar.get_x() + bar.get_width()/2, val + 30, f'{val:,}', ha='center', va='bottom', fontweight='bold')
     
-    issues = ['Duplicates', 'Missing', 'Outliers']
+    issues = ['Duplicates', 'Missing\nValues', 'Outliers']
     issues_count = [duplicates_removed, missing_removed, outliers_removed]
     colors = ['#3498db', '#e74c3c', '#f39c12']
-    bars = axes[0, 1].bar(issues, issues_count, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
-    axes[0, 1].set_ylabel('Count', fontweight='bold')
+    bars = axes[0, 1].barh(issues, issues_count, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    axes[0, 1].set_xlabel('Count', fontweight='bold')
     axes[0, 1].set_title('Data Quality Issues Resolved', fontweight='bold')
-    axes[0, 1].grid(alpha=0.3, axis='y')
+    axes[0, 1].grid(alpha=0.3, axis='x')
     for bar, val in zip(bars, issues_count):
         if val > 0:
-            axes[0, 1].text(bar.get_x() + bar.get_width()/2, val, f'{val:,}', ha='center', va='bottom', fontweight='bold', fontsize=9)
+            axes[0, 1].text(val + max(issues_count)*0.02, bar.get_y() + bar.get_height()/2, f'{val:,}', 
+                           ha='left', va='center', fontweight='bold', fontsize=10)
     
     axes[1, 0].hist(df_clean[target_col], bins=40, color='#2ecc71', alpha=0.7, edgecolor='black')
     axes[1, 0].axvline(Q5, color='red', linestyle='--', lw=2, label=f'5th: {format_rm_value(Q5)}')
@@ -320,9 +373,17 @@ elif page == "🧹 Data Cleaning":
     axes[1, 0].legend(fontsize=8)
     axes[1, 0].grid(alpha=0.3, axis='y')
     
-    if sum(issues_count) > 0:
-        axes[1, 1].pie(issues_count, labels=issues, autopct='%1.1f%%', colors=colors, startangle=90, textprops={'fontsize': 10})
+    axes[1, 1].bar(range(len(issues)), issues_count, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    axes[1, 1].set_xticks(range(len(issues)))
+    axes[1, 1].set_xticklabels(issues, fontsize=10)
+    axes[1, 1].set_ylabel('Count', fontweight='bold')
     axes[1, 1].set_title('Issues Distribution', fontweight='bold')
+    axes[1, 1].grid(alpha=0.3, axis='y')
+    for i, val in enumerate(issues_count):
+        if val > 0:
+            pct = val/total_removed*100 if total_removed > 0 else 0
+            axes[1, 1].text(i, val + max(issues_count)*0.02, f'{val:,}\n({pct:.1f}%)', 
+                           ha='center', va='bottom', fontweight='bold', fontsize=9)
     
     plt.suptitle('DATA CLEANING PROCESS', fontsize=12, fontweight='bold')
     plt.tight_layout()
@@ -333,7 +394,7 @@ elif page == "🧹 Data Cleaning":
     st.info(f"📊 Records removed: {total_removed:,} ({total_removed/initial_rows*100:.1f}%)")
 
 # ============================================================================
-# PAGE 4: FEATURE ENGINEERING - FIXED
+# PAGE 4: FEATURE ENGINEERING
 # ============================================================================
 elif page == "🔧 Feature Engineering":
     st.header("🔧 FEATURE ENGINEERING - PROPER NORMALIZATION")
@@ -351,15 +412,12 @@ elif page == "🔧 Feature Engineering":
     numerical_cols = df_fe.select_dtypes(include=[np.number]).columns.tolist()
     
     if len(numerical_cols) > 0:
-        # BEFORE transformation
         before_stats = df_fe[numerical_cols].describe().round(3)
         
-        # Log transformation
         df_fe_transformed = df_fe.copy()
         for col in numerical_cols:
             df_fe_transformed[col] = np.log1p(df_fe_transformed[col])
         
-        # AFTER transformation
         after_stats = df_fe_transformed[numerical_cols].describe().round(3)
         
         col1, col2 = st.columns(2)
@@ -407,7 +465,7 @@ elif page == "🔧 Feature Engineering":
         plt.close()
 
 # ============================================================================
-# PAGE 5: DATA PREPARATION - PROPER SCALING - FIXED
+# PAGE 5: DATA PREPARATION
 # ============================================================================
 elif page == "📋 Data Preparation":
     st.header("📋 DATA PREPARATION - ADVANCED SCALING")
@@ -494,33 +552,33 @@ elif page == "📋 Data Preparation":
     colors = ['#3498db', '#e74c3c']
     
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.pie(split_sizes, labels=['Train', 'Test'], autopct='%1.1f%%', colors=colors, startangle=90)
-    ax1.set_title('Train-Test Split Ratio', fontweight='bold')
+    ax1.pie(split_sizes, labels=['Train', 'Test'], autopct='%1.1f%%', colors=colors, startangle=90, textprops={'fontsize': 11, 'fontweight': 'bold'})
+    ax1.set_title('Train-Test Split Ratio', fontweight='bold', fontsize=12)
     
     ax2 = fig.add_subplot(gs[0, 1])
-    ax2.bar(['Training', 'Test'], split_sizes, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
-    ax2.set_ylabel('Samples', fontweight='bold')
-    ax2.set_title('Dataset Sizes', fontweight='bold')
+    bars = ax2.bar(['Training', 'Test'], split_sizes, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    ax2.set_ylabel('Samples', fontweight='bold', fontsize=11)
+    ax2.set_title('Dataset Sizes', fontweight='bold', fontsize=12)
     ax2.grid(alpha=0.3, axis='y')
-    for i, v in enumerate(split_sizes):
-        ax2.text(i, v + 10, f'{v:,}', ha='center', fontweight='bold')
+    for bar, val in zip(bars, split_sizes):
+        ax2.text(bar.get_x() + bar.get_width()/2, val + 10, f'{val:,}', ha='center', va='bottom', fontweight='bold', fontsize=11)
     
     numerical_features = X_train.select_dtypes(include=[np.number]).columns.tolist()
     sample_col = numerical_features[0] if len(numerical_features) > 0 else X_train.columns[0]
     
     ax3 = fig.add_subplot(gs[1, 0])
     ax3.hist(X_train[sample_col], bins=30, color='#e74c3c', alpha=0.7, edgecolor='black', label='Before')
-    ax3.set_title(f'Before Scaling: {sample_col}', fontweight='bold')
-    ax3.set_ylabel('Frequency', fontweight='bold')
+    ax3.set_title(f'Before Scaling: {sample_col}', fontweight='bold', fontsize=12)
+    ax3.set_ylabel('Frequency', fontweight='bold', fontsize=11)
     ax3.grid(alpha=0.3, axis='y')
-    ax3.legend()
+    ax3.legend(fontsize=10)
     
     ax4 = fig.add_subplot(gs[1, 1])
     ax4.hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black', label='After')
-    ax4.set_title(f'After Advanced Scaling: {sample_col}', fontweight='bold')
-    ax4.set_ylabel('Frequency', fontweight='bold')
+    ax4.set_title(f'After Advanced Scaling: {sample_col}', fontweight='bold', fontsize=12)
+    ax4.set_ylabel('Frequency', fontweight='bold', fontsize=11)
     ax4.grid(alpha=0.3, axis='y')
-    ax4.legend()
+    ax4.legend(fontsize=10)
     
     plt.suptitle('ADVANCED DATA PREPARATION', fontsize=13, fontweight='bold')
     st.pyplot(fig, use_container_width=True)
@@ -556,12 +614,10 @@ elif page == "⚙️ Model Training":
     Q5 = df_train[target_col].quantile(0.05)
     df_train = df_train[(df_train[target_col] >= Q5) & (df_train[target_col] <= Q95)].copy()
     
-    # Log transform numerical
     numerical_cols = df_train.select_dtypes(include=[np.number]).columns.tolist()
     for col in numerical_cols:
         df_train[col] = np.log1p(df_train[col])
     
-    # Encode categorical
     categorical_cols = df_train.select_dtypes(include=['object']).columns.tolist()
     for col in categorical_cols:
         le = LabelEncoder()
@@ -574,7 +630,6 @@ elif page == "⚙️ Model Training":
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
     
-    # Advanced Scaling
     robust_scaler = RobustScaler()
     X_train_scaled = robust_scaler.fit_transform(X_train)
     X_test_scaled = robust_scaler.transform(X_test)
@@ -626,13 +681,20 @@ subsample=[0.8,0.9,1.0]""", language="python")
     col1, col2 = st.columns([1.5, 1])
     with col1:
         st.code("""RandomForestRegressor()
-n_estimators=300
-max_depth=[15,20,25]
-min_samples_leaf=[1,2]""", language="python")
+n_estimators=30
+max_depth=[6,8,10]
+min_samples_leaf=[5,10]""", language="python")
     
     rf_search = GridSearchCV(
-        RandomForestRegressor(random_state=42, n_jobs=-1),
-        {'n_estimators': [300], 'max_depth': [15, 20, 25], 'min_samples_leaf': [1, 2], 'max_features': ['sqrt']},
+        RandomForestRegressor(
+            n_estimators=30,
+            max_depth=8,
+            min_samples_leaf=10,
+            max_features='sqrt',
+            random_state=42,
+            n_jobs=-1
+        ),
+        {'max_depth': [6, 8, 10], 'min_samples_leaf': [5, 10]},
         cv=kfold, scoring='r2', n_jobs=-1, verbose=0
     )
     rf_search.fit(X_train_scaled, y_train)
@@ -657,7 +719,7 @@ min_samples_leaf=[1,2]""", language="python")
     with col1:
         st.code("""Ridge(alpha=tuned)
 GridSearchCV
-alpha=[0.1,1,10,100]""", language="python")
+alpha=[0.1,1,10,100,1000]""", language="python")
     
     ridge_search = GridSearchCV(
         Ridge(random_state=42),
@@ -711,6 +773,27 @@ gamma=['scale',0.001]""", language="python")
     
     st.success("✅ Training complete with 5-Fold CV!")
     
+    # SAVE MODELS
+    st.subheader("💾 Saving Models")
+    
+    scalers_dict = {
+        'robust_scaler': robust_scaler,
+        'power_transformer': power_transformer
+    }
+    
+    models_dict = {
+        'Gradient Boosting': gb_search.best_estimator_,
+        'Random Forest': rf_search.best_estimator_,
+        'Ridge': ridge_search.best_estimator_,
+        'SVR': svr_search.best_estimator_
+    }
+    
+    with st.spinner("Saving models..."):
+        for model_name, model in models_dict.items():
+            save_model_pipeline_fixed(model_name, model, scalers_dict)
+    
+    st.success("✅ All models saved successfully!")
+    
     st.session_state.results = {
         'Gradient Boosting': {'R²': r2_gb, 'RMSE': rmse_gb, 'MAE': mae_gb, 'MAPE': mape_gb, 'train_r2': r2_train_gb, 'pred': y_pred_gb},
         'Random Forest': {'R²': r2_rf, 'RMSE': rmse_rf, 'MAE': mae_rf, 'MAPE': mape_rf, 'train_r2': r2_train_rf, 'pred': y_pred_rf},
@@ -754,7 +837,7 @@ elif page == "🏆 Model Evaluation":
         - **MAPE < 8%:** Excellent predictions ✅
         """)
         
-        fig = plt.figure(figsize=(14, 10))
+        fig = plt.figure(figsize=(15, 10))
         gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
         
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
@@ -862,5 +945,61 @@ elif page == "🏆 Model Evaluation":
         col3.metric("MAE (Log)", f"{mae_raw[best_idx]:.4f}", "Lower = Better")
         col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%", status_mape)
 
+# ============================================================================
+# PAGE 8: DOWNLOAD MODELS
+# ============================================================================
+elif page == "💾 Download Models":
+    st.header("💾 DOWNLOAD TRAINED MODELS")
+    
+    st.subheader("📊 File Size Summary")
+    
+    total_size = 0
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        file_info = []
+        for file in sorted(MODELS_DIR.glob('*')):
+            size_mb = file.stat().st_size / (1024**2)
+            total_size += size_mb
+            file_info.append({
+                'Filename': file.name,
+                'Size (MB)': f"{size_mb:.2f}"
+            })
+        
+        if file_info:
+            st.dataframe(pd.DataFrame(file_info), use_container_width=True)
+            st.metric("Total Size", f"{total_size:.2f} MB")
+        else:
+            st.warning("⚠️ No models saved yet. Train models first!")
+    
+    st.subheader("📥 Download Individual Models")
+    
+    for file in sorted(MODELS_DIR.glob('*')):
+        if file.suffix == '.joblib':
+            model_name = file.stem.replace('_model', '')
+            
+            with open(file, 'rb') as f:
+                st.download_button(
+                    label=f"⬇️ Download {model_name} Model",
+                    data=f,
+                    file_name=file.name,
+                    mime="application/octet-stream",
+                    key=f"download_{model_name}_model"
+                )
+    
+    st.subheader("📥 Download Scalers")
+    
+    for file in sorted(MODELS_DIR.glob('*_scalers.pkl')):
+        model_name = file.stem.replace('_scalers', '')
+        
+        with open(file, 'rb') as f:
+            st.download_button(
+                label=f"⬇️ Download {model_name} Scalers",
+                data=f,
+                file_name=file.name,
+                mime="application/octet-stream",
+                key=f"download_{model_name}_scalers"
+            )
+    
 st.sidebar.markdown("---")
 st.sidebar.markdown("🚀 **Advanced ML Pipeline | Proper Scaling & Normalization**")
