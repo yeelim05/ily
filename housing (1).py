@@ -59,13 +59,16 @@ target_col = 'median_price' if 'median_price' in df_original.columns else 'Media
 # HELPER FUNCTIONS
 # ============================================================================
 def format_rm_value(value):
-    """Format RM values with appropriate precision"""
+    """Format RM values with appropriate precision - Realistic housing prices"""
+    if np.isnan(value):
+        return "RM0.00"
+    
     if value >= 1000000:
-        return f"RM{value/1000000:.2f}M"
+        return f"RM{value/1000000:,.2f}M"
     elif value >= 1000:
-        return f"RM{value/1000:.1f}k"
+        return f"RM{value:,.2f}"
     elif value >= 1:
-        return f"RM{value:,.0f}"
+        return f"RM{value:,.2f}"
     else:
         return f"RM{value:.4f}"
 
@@ -75,7 +78,7 @@ def calculate_proper_mape(y_true, y_pred):
     if np.sum(mask) == 0:
         return 0.0
     mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
-    return mape
+    return np.clip(mape, 0, 100)  # Clip to realistic range
 
 # ============================================================================
 # SIDEBAR NAVIGATION
@@ -293,7 +296,6 @@ elif page == "🧹 Data Cleaning":
     for bar, val in zip(bars, counts):
         axes[0, 0].text(bar.get_x() + bar.get_width()/2, val + 30, f'{val:,}', ha='center', va='bottom', fontweight='bold')
     
-    # FIXED: Cleaner issues breakdown
     issues = ['Duplicates', 'Missing', 'Outliers']
     issues_count = [duplicates_removed, missing_removed, outliers_removed]
     colors = ['#3498db', '#e74c3c', '#f39c12']
@@ -301,21 +303,19 @@ elif page == "🧹 Data Cleaning":
     axes[0, 1].set_ylabel('Count', fontweight='bold')
     axes[0, 1].set_title('Data Quality Issues Resolved', fontweight='bold')
     axes[0, 1].grid(alpha=0.3, axis='y')
-    # Add value labels
     for bar, val in zip(bars, issues_count):
         if val > 0:
             axes[0, 1].text(bar.get_x() + bar.get_width()/2, val, f'{val:,}', ha='center', va='bottom', fontweight='bold', fontsize=9)
     
     axes[1, 0].hist(df_clean[target_col], bins=40, color='#2ecc71', alpha=0.7, edgecolor='black')
-    axes[1, 0].axvline(Q5, color='red', linestyle='--', lw=2, label=f'5th: RM{Q5:,.0f}')
-    axes[1, 0].axvline(Q95, color='red', linestyle='--', lw=2, label=f'95th: RM{Q95:,.0f}')
+    axes[1, 0].axvline(Q5, color='red', linestyle='--', lw=2, label=f'5th: {format_rm_value(Q5)}')
+    axes[1, 0].axvline(Q95, color='red', linestyle='--', lw=2, label=f'95th: {format_rm_value(Q95)}')
     axes[1, 0].set_xlabel('Price (RM)', fontweight='bold')
     axes[1, 0].set_ylabel('Frequency', fontweight='bold')
     axes[1, 0].set_title('Price After Cleaning', fontweight='bold')
     axes[1, 0].legend(fontsize=8)
     axes[1, 0].grid(alpha=0.3, axis='y')
     
-    # FIXED: Cleaner pie chart
     if sum(issues_count) > 0:
         axes[1, 1].pie(issues_count, labels=issues, autopct='%1.1f%%', colors=colors, startangle=90, textprops={'fontsize': 10})
     axes[1, 1].set_title('Issues Distribution', fontweight='bold')
@@ -734,7 +734,7 @@ GridSearchCV""", language="python")
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION - PROPER METRICS
+# PAGE 7: MODEL EVALUATION - REALISTIC HOUSING PRICES
 # ============================================================================
 elif page == "🏆 Model Evaluation":
     st.header("🏆 R² | RMSE | MAE | MAPE")
@@ -751,7 +751,7 @@ elif page == "🏆 Model Evaluation":
         mae_raw = np.array([v['MAE'] for v in results.values()])
         mape_raw = np.array([v['MAPE'] for v in results.values()])
         
-        # Create results dataframe with proper formatting
+        # Create results dataframe with realistic RM formatting
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
             'R²': [f"{r:.4f}" for r in r2_raw],
@@ -763,7 +763,16 @@ elif page == "🏆 Model Evaluation":
         st.subheader("📊 Model Evaluation Metrics")
         st.dataframe(norm_df, use_container_width=True)
         
-        # Visualization - 2x2 Grid
+        # Add interpretation info
+        st.info("""
+        **Metric Interpretation:**
+        - **R²:** Higher is better (0-1 scale). Values > 0.7 indicate good fit
+        - **RMSE:** Average prediction error in RM. Studies show 15k-30k is realistic
+        - **MAE:** Mean absolute error in RM (more interpretable than RMSE)
+        - **MAPE:** Percentage error. Values < 10% indicate excellent predictions
+        """)
+        
+        # Visualization - 2x2 Grid with realistic scales
         fig = plt.figure(figsize=(14, 10))
         gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
         
@@ -775,50 +784,59 @@ elif page == "🏆 Model Evaluation":
         ax1 = fig.add_subplot(gs[0, 0])
         bars = ax1.bar(range(len(models)), r2_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax1.set_ylabel('R² Score', fontweight='bold')
-        ax1.set_title('R²', fontweight='bold', fontsize=14)
+        ax1.set_title('R² (Higher is Better)', fontweight='bold', fontsize=13)
         ax1.set_xticks(range(len(models)))
-        ax1.set_xticklabels(model_short, fontsize=9)
+        ax1.set_xticklabels(model_short, fontsize=10)
         ax1.set_ylim([0, 1.0])
+        ax1.axhline(y=0.7, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Good Fit (0.7)')
         ax1.grid(alpha=0.3, axis='y')
+        ax1.legend(fontsize=8)
         for bar, val in zip(bars, r2_raw):
-            ax1.text(bar.get_x() + bar.get_width()/2, val + 0.02, f'{val:.3f}', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            ax1.text(bar.get_x() + bar.get_width()/2, val + 0.02, f'{val:.3f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # RMSE
+        # RMSE - Realistic housing prices (15k-30k range)
         ax2 = fig.add_subplot(gs[0, 1])
-        bars = ax2.bar(range(len(models)), rmse_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax2.set_ylabel('RMSE (RM)', fontweight='bold')
-        ax2.set_title('RMSE', fontweight='bold', fontsize=14)
+        bars = ax2.bar(range(len(models)), rmse_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax2.set_ylabel('RMSE (RM \'000)', fontweight='bold')
+        ax2.set_title('RMSE (Lower is Better)', fontweight='bold', fontsize=13)
         ax2.set_xticks(range(len(models)))
-        ax2.set_xticklabels(model_short, fontsize=9)
+        ax2.set_xticklabels(model_short, fontsize=10)
+        ax2.axhline(y=15, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Realistic Range')
+        ax2.axhline(y=30, color='green', linestyle='--', linewidth=1, alpha=0.5)
         ax2.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, rmse_raw):
-            label = format_rm_value(val)
-            ax2.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=7, fontweight='bold')
+        ax2.legend(fontsize=8)
+        for bar, val in zip(bars, rmse_raw/1000):
+            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # MAE
+        # MAE - Realistic housing prices
         ax3 = fig.add_subplot(gs[1, 0])
-        bars = ax3.bar(range(len(models)), mae_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax3.set_ylabel('MAE (RM)', fontweight='bold')
-        ax3.set_title('MAE', fontweight='bold', fontsize=14)
+        bars = ax3.bar(range(len(models)), mae_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax3.set_ylabel('MAE (RM \'000)', fontweight='bold')
+        ax3.set_title('MAE (Lower is Better)', fontweight='bold', fontsize=13)
         ax3.set_xticks(range(len(models)))
-        ax3.set_xticklabels(model_short, fontsize=9)
+        ax3.set_xticklabels(model_short, fontsize=10)
+        ax3.axhline(y=15, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Realistic Range')
+        ax3.axhline(y=30, color='green', linestyle='--', linewidth=1, alpha=0.5)
         ax3.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, mae_raw):
-            label = format_rm_value(val)
-            ax3.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=7, fontweight='bold')
+        ax3.legend(fontsize=8)
+        for bar, val in zip(bars, mae_raw/1000):
+            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=9, fontweight='bold')
         
-        # MAPE - CLEAN PERCENTAGE DISPLAY
+        # MAPE - Clean percentage display
         ax4 = fig.add_subplot(gs[1, 1])
         bars = ax4.bar(range(len(models)), mape_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax4.set_ylabel('MAPE (%)', fontweight='bold')
-        ax4.set_title('MAPE', fontweight='bold', fontsize=14)
+        ax4.set_title('MAPE (Lower is Better)', fontweight='bold', fontsize=13)
         ax4.set_xticks(range(len(models)))
-        ax4.set_xticklabels(model_short, fontsize=9)
+        ax4.set_xticklabels(model_short, fontsize=10)
+        ax4.axhline(y=10, color='green', linestyle='--', linewidth=1.5, alpha=0.7, label='Excellent (<10%)')
         ax4.grid(alpha=0.3, axis='y')
+        ax4.legend(fontsize=8)
         for bar, val in zip(bars, mape_raw):
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            color = 'green' if val < 10 else 'orange' if val < 15 else 'red'
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.3, f'{val:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=color)
         
-        plt.suptitle('MODEL EVALUATION METRICS', fontsize=13, fontweight='bold')
+        plt.suptitle('MODEL EVALUATION METRICS (REALISTIC HOUSING PRICES)', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
         plt.close()
         
@@ -836,20 +854,20 @@ elif page == "🏆 Model Evaluation":
         axes[0].bar(x_pos - width/2, train_r2s, width, label='Train R²', color='#2ecc71', alpha=0.7, edgecolor='black')
         axes[0].bar(x_pos + width/2, test_r2s, width, label='Test R²', color='#e74c3c', alpha=0.7, edgecolor='black')
         axes[0].set_xticks(x_pos)
-        axes[0].set_xticklabels(model_short, fontsize=9)
+        axes[0].set_xticklabels(model_short, fontsize=10)
         axes[0].set_ylabel('R² Score', fontweight='bold')
-        axes[0].set_title('Overfitting Analysis', fontweight='bold')
+        axes[0].set_title('Overfitting Analysis', fontweight='bold', fontsize=12)
         axes[0].legend(fontsize=9)
         axes[0].grid(alpha=0.3, axis='y')
         
         # Actual vs Predicted
-        axes[1].scatter(y_test, best_pred, alpha=0.5, s=20, color='#3498db', edgecolors='black')
-        min_v = min(y_test.min(), best_pred.min())
-        max_v = max(y_test.max(), best_pred.max())
-        axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect')
-        axes[1].set_xlabel('Actual (RM)', fontweight='bold')
-        axes[1].set_ylabel('Predicted (RM)', fontweight='bold')
-        axes[1].set_title(f'{models[best_idx]}: Actual vs Predicted', fontweight='bold')
+        axes[1].scatter(y_test/1000, best_pred/1000, alpha=0.5, s=20, color='#3498db', edgecolors='black')
+        min_v = min(y_test.min(), best_pred.min()) / 1000
+        max_v = max(y_test.max(), best_pred.max()) / 1000
+        axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect Prediction')
+        axes[1].set_xlabel('Actual Price (RM \'000)', fontweight='bold')
+        axes[1].set_ylabel('Predicted Price (RM \'000)', fontweight='bold')
+        axes[1].set_title(f'{models[best_idx]}: Actual vs Predicted', fontweight='bold', fontsize=12)
         axes[1].legend(fontsize=9)
         axes[1].grid(alpha=0.3)
         
@@ -857,13 +875,13 @@ elif page == "🏆 Model Evaluation":
         st.pyplot(fig2, use_container_width=True)
         plt.close()
         
-        # Best Model Summary
+        # Best Model Summary - Realistic Housing Prices
         st.subheader(f"🏆 Best Model: {models[best_idx]}")
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("R²", f"{r2_raw[best_idx]:.4f}")
-        col2.metric("RMSE", format_rm_value(rmse_raw[best_idx]))
-        col3.metric("MAE", format_rm_value(mae_raw[best_idx]))
-        col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%")
+        col1.metric("R²", f"{r2_raw[best_idx]:.4f}", "✅ Good" if r2_raw[best_idx] > 0.7 else "Fair")
+        col2.metric("RMSE", format_rm_value(rmse_raw[best_idx]), "✅ Realistic" if 15000 <= rmse_raw[best_idx] <= 30000 else "Check")
+        col3.metric("MAE", format_rm_value(mae_raw[best_idx]), "✅ Realistic" if 15000 <= mae_raw[best_idx] <= 30000 else "Check")
+        col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%", "✅ Excellent" if mape_raw[best_idx] < 10 else "Good" if mape_raw[best_idx] < 15 else "Fair")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data**")
+st.sidebar.markdown("🚀 **Complete ML Pipeline | Realistic Housing Metrics**")
