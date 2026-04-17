@@ -1,10 +1,22 @@
+# Core Data Science
+streamlit
 pandas
 numpy
-scipy
+
+# Visualization
 matplotlib
 seaborn
+
+# Statistics & Science
+scipy
+
+# Machine Learning
 scikit-learn
 joblib
+
+# Data Loading
 datasets
 huggingface-hub
+
+# Optional: For better performance
 python-dotenv
