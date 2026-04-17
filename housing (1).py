@@ -56,6 +56,28 @@ df_original = load_huggingface_data()
 target_col = 'median_price' if 'median_price' in df_original.columns else 'Median_Price'
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+def format_rm_value(value):
+    """Format RM values with appropriate precision"""
+    if value >= 1000000:
+        return f"RM{value/1000000:.2f}M"
+    elif value >= 1000:
+        return f"RM{value/1000:.1f}k"
+    elif value >= 1:
+        return f"RM{value:,.0f}"
+    else:
+        return f"RM{value:.4f}"
+
+def calculate_proper_mape(y_true, y_pred):
+    """Calculate MAPE properly - handle division by zero"""
+    mask = y_true != 0
+    if np.sum(mask) == 0:
+        return 0.0
+    mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+    return mape
+
+# ============================================================================
 # SIDEBAR NAVIGATION
 # ============================================================================
 page = st.sidebar.radio("📍 Navigation", [
@@ -271,13 +293,18 @@ elif page == "🧹 Data Cleaning":
     for bar, val in zip(bars, counts):
         axes[0, 0].text(bar.get_x() + bar.get_width()/2, val + 30, f'{val:,}', ha='center', va='bottom', fontweight='bold')
     
+    # FIXED: Cleaner issues breakdown
     issues = ['Duplicates', 'Missing', 'Outliers']
     issues_count = [duplicates_removed, missing_removed, outliers_removed]
     colors = ['#3498db', '#e74c3c', '#f39c12']
-    axes[0, 1].bar(issues, issues_count, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    bars = axes[0, 1].bar(issues, issues_count, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
     axes[0, 1].set_ylabel('Count', fontweight='bold')
-    axes[0, 1].set_title('Data Quality Issues', fontweight='bold')
+    axes[0, 1].set_title('Data Quality Issues Resolved', fontweight='bold')
     axes[0, 1].grid(alpha=0.3, axis='y')
+    # Add value labels
+    for bar, val in zip(bars, issues_count):
+        if val > 0:
+            axes[0, 1].text(bar.get_x() + bar.get_width()/2, val, f'{val:,}', ha='center', va='bottom', fontweight='bold', fontsize=9)
     
     axes[1, 0].hist(df_clean[target_col], bins=40, color='#2ecc71', alpha=0.7, edgecolor='black')
     axes[1, 0].axvline(Q5, color='red', linestyle='--', lw=2, label=f'5th: RM{Q5:,.0f}')
@@ -288,7 +315,9 @@ elif page == "🧹 Data Cleaning":
     axes[1, 0].legend(fontsize=8)
     axes[1, 0].grid(alpha=0.3, axis='y')
     
-    axes[1, 1].pie(issues_count, labels=issues, autopct='%1.1f%%', colors=colors, startangle=90)
+    # FIXED: Cleaner pie chart
+    if sum(issues_count) > 0:
+        axes[1, 1].pie(issues_count, labels=issues, autopct='%1.1f%%', colors=colors, startangle=90, textprops={'fontsize': 10})
     axes[1, 1].set_title('Issues Distribution', fontweight='bold')
     
     plt.suptitle('DATA CLEANING PROCESS', fontsize=12, fontweight='bold')
@@ -385,7 +414,7 @@ elif page == "🔧 Feature Engineering":
         plt.close()
 
 # ============================================================================
-# PAGE 5: DATA PREPARATION - FIXED
+# PAGE 5: DATA PREPARATION
 # ============================================================================
 elif page == "📋 Data Preparation":
     st.header("📋 DATA PREPARATION - COMPLETE PIPELINE")
@@ -474,7 +503,6 @@ elif page == "📋 Data Preparation":
     - Features: {X_train.shape[1]}
     """)
     
-    # Visualization - FIXED TO 2x2 GRID
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
     
@@ -603,12 +631,12 @@ Hyperparameters tuned""", language="python")
     r2_ada = r2_score(y_test, y_pred_ada)
     rmse_ada = np.sqrt(mean_squared_error(y_test, y_pred_ada))
     mae_ada = mean_absolute_error(y_test, y_pred_ada)
-    mape_ada = mean_absolute_percentage_error(y_test, y_pred_ada) * 100
+    mape_ada = calculate_proper_mape(y_test.values, y_pred_ada)
     r2_train_ada = r2_score(y_train, y_train_ada)
     
     with col2:
         st.metric("R²", f"{r2_ada:.4f}")
-        st.metric("RMSE", f"RM{rmse_ada:,.0f}" if rmse_ada >= 1 else f"RM{rmse_ada:.2f}")
+        st.metric("RMSE", format_rm_value(rmse_ada))
         st.metric("MAPE", f"{mape_ada:.2f}%")
     
     # MODEL 2: RIDGE
@@ -630,7 +658,7 @@ alpha: [0.001...1000]
     r2_ridge = r2_score(y_test, y_pred_ridge)
     rmse_ridge = np.sqrt(mean_squared_error(y_test, y_pred_ridge))
     mae_ridge = mean_absolute_error(y_test, y_pred_ridge)
-    mape_ridge = mean_absolute_percentage_error(y_test, y_pred_ridge) * 100
+    mape_ridge = calculate_proper_mape(y_test.values, y_pred_ridge)
     r2_train_ridge = r2_score(y_train, y_train_ridge)
     
     with col2:
@@ -658,7 +686,7 @@ subsample: [0.8, 1.0]""", language="python")
     r2_gb = r2_score(y_test, y_pred_gb)
     rmse_gb = np.sqrt(mean_squared_error(y_test, y_pred_gb))
     mae_gb = mean_absolute_error(y_test, y_pred_gb)
-    mape_gb = mean_absolute_percentage_error(y_test, y_pred_gb) * 100
+    mape_gb = calculate_proper_mape(y_test.values, y_pred_gb)
     r2_train_gb = r2_score(y_train, y_train_gb)
     
     with col2:
@@ -686,7 +714,7 @@ GridSearchCV""", language="python")
     r2_rf = r2_score(y_test, y_pred_rf)
     rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
     mae_rf = mean_absolute_error(y_test, y_pred_rf)
-    mape_rf = mean_absolute_percentage_error(y_test, y_pred_rf) * 100
+    mape_rf = calculate_proper_mape(y_test.values, y_pred_rf)
     r2_train_rf = r2_score(y_train, y_train_rf)
     
     with col2:
@@ -706,7 +734,7 @@ GridSearchCV""", language="python")
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION
+# PAGE 7: MODEL EVALUATION - PROPER METRICS
 # ============================================================================
 elif page == "🏆 Model Evaluation":
     st.header("🏆 R² | RMSE | MAE | MAPE")
@@ -723,12 +751,12 @@ elif page == "🏆 Model Evaluation":
         mae_raw = np.array([v['MAE'] for v in results.values()])
         mape_raw = np.array([v['MAPE'] for v in results.values()])
         
-        # Create results dataframe
+        # Create results dataframe with proper formatting
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
             'R²': [f"{r:.4f}" for r in r2_raw],
-            'RMSE (RM)': [f"RM{rm:,.0f}" if rm >= 1 else f"RM{rm:.2f}" for rm in rmse_raw],
-            'MAE (RM)': [f"RM{ma:,.0f}" if ma >= 1 else f"RM{ma:.2f}" for ma in mae_raw],
+            'RMSE': [format_rm_value(rm) for rm in rmse_raw],
+            'MAE': [format_rm_value(ma) for ma in mae_raw],
             'MAPE': [f"{mp:.2f}%" for mp in mape_raw]
         })
         
@@ -741,6 +769,7 @@ elif page == "🏆 Model Evaluation":
         
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
         models = list(results.keys())
+        model_short = ['Ada', 'Ridge', 'GB', 'RF']
         
         # R² Score
         ax1 = fig.add_subplot(gs[0, 0])
@@ -748,7 +777,7 @@ elif page == "🏆 Model Evaluation":
         ax1.set_ylabel('R² Score', fontweight='bold')
         ax1.set_title('R²', fontweight='bold', fontsize=14)
         ax1.set_xticks(range(len(models)))
-        ax1.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
+        ax1.set_xticklabels(model_short, fontsize=9)
         ax1.set_ylim([0, 1.0])
         ax1.grid(alpha=0.3, axis='y')
         for bar, val in zip(bars, r2_raw):
@@ -756,27 +785,27 @@ elif page == "🏆 Model Evaluation":
         
         # RMSE
         ax2 = fig.add_subplot(gs[0, 1])
-        bars = ax2.bar(range(len(models)), rmse_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax2.set_ylabel('RMSE (RM \'000)', fontweight='bold')
+        bars = ax2.bar(range(len(models)), rmse_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax2.set_ylabel('RMSE (RM)', fontweight='bold')
         ax2.set_title('RMSE', fontweight='bold', fontsize=14)
         ax2.set_xticks(range(len(models)))
-        ax2.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
+        ax2.set_xticklabels(model_short, fontsize=9)
         ax2.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, rmse_raw/1000):
-            label = f'RM{val:.1f}k' if val >= 1 else f'RM{val*1000:.0f}'
-            ax2.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, rmse_raw):
+            label = format_rm_value(val)
+            ax2.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=7, fontweight='bold')
         
         # MAE
         ax3 = fig.add_subplot(gs[1, 0])
-        bars = ax3.bar(range(len(models)), mae_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax3.set_ylabel('MAE (RM \'000)', fontweight='bold')
+        bars = ax3.bar(range(len(models)), mae_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax3.set_ylabel('MAE (RM)', fontweight='bold')
         ax3.set_title('MAE', fontweight='bold', fontsize=14)
         ax3.set_xticks(range(len(models)))
-        ax3.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
+        ax3.set_xticklabels(model_short, fontsize=9)
         ax3.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, mae_raw/1000):
-            label = f'RM{val:.1f}k' if val >= 1 else f'RM{val*1000:.0f}'
-            ax3.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, mae_raw):
+            label = format_rm_value(val)
+            ax3.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=7, fontweight='bold')
         
         # MAPE - CLEAN PERCENTAGE DISPLAY
         ax4 = fig.add_subplot(gs[1, 1])
@@ -784,10 +813,10 @@ elif page == "🏆 Model Evaluation":
         ax4.set_ylabel('MAPE (%)', fontweight='bold')
         ax4.set_title('MAPE', fontweight='bold', fontsize=14)
         ax4.set_xticks(range(len(models)))
-        ax4.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
+        ax4.set_xticklabels(model_short, fontsize=9)
         ax4.grid(alpha=0.3, axis='y')
         for bar, val in zip(bars, mape_raw):
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.1, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         plt.suptitle('MODEL EVALUATION METRICS', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
@@ -807,7 +836,7 @@ elif page == "🏆 Model Evaluation":
         axes[0].bar(x_pos - width/2, train_r2s, width, label='Train R²', color='#2ecc71', alpha=0.7, edgecolor='black')
         axes[0].bar(x_pos + width/2, test_r2s, width, label='Test R²', color='#e74c3c', alpha=0.7, edgecolor='black')
         axes[0].set_xticks(x_pos)
-        axes[0].set_xticklabels([m for m in models], fontsize=9)
+        axes[0].set_xticklabels(model_short, fontsize=9)
         axes[0].set_ylabel('R² Score', fontweight='bold')
         axes[0].set_title('Overfitting Analysis', fontweight='bold')
         axes[0].legend(fontsize=9)
@@ -832,8 +861,8 @@ elif page == "🏆 Model Evaluation":
         st.subheader(f"🏆 Best Model: {models[best_idx]}")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("R²", f"{r2_raw[best_idx]:.4f}")
-        col2.metric("RMSE", f"RM{rmse_raw[best_idx]:,.0f}" if rmse_raw[best_idx] >= 1 else f"RM{rmse_raw[best_idx]:.2f}")
-        col3.metric("MAE", f"RM{mae_raw[best_idx]:,.0f}" if mae_raw[best_idx] >= 1 else f"RM{mae_raw[best_idx]:.2f}")
+        col2.metric("RMSE", format_rm_value(rmse_raw[best_idx]))
+        col3.metric("MAE", format_rm_value(mae_raw[best_idx]))
         col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%")
 
 st.sidebar.markdown("---")
