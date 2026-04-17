@@ -17,8 +17,8 @@ logging.getLogger('datasets').setLevel(logging.ERROR)
 
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
-from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
 
 sns.set_theme(style="whitegrid", palette="husl")
@@ -474,7 +474,6 @@ elif page == "📋 Data Preparation":
     - Features: {X_train.shape[1]}
     """)
     
-    # Visualization
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
     
@@ -545,7 +544,7 @@ elif page == "📋 Data Preparation":
     st.info(summary)
 
 # ============================================================================
-# PAGE 6: MODEL TRAINING
+# PAGE 6: MODEL TRAINING - WITH NEW BASELINE
 # ============================================================================
 elif page == "⚙️ Model Training":
     st.header("⚙️ MODEL TRAINING (5-Fold CV)")
@@ -589,28 +588,28 @@ elif page == "⚙️ Model Training":
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     progress = st.progress(0)
     
-    # MODEL 1: LINEAR REGRESSION
+    # MODEL 1: ADABOOST (NEW BASELINE - Better for Housing)
     progress.progress(20)
-    st.subheader("1️⃣ Linear Regression")
+    st.subheader("1️⃣ AdaBoost Regressor (Baseline)")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("LinearRegression()\n- Baseline model\n- No hyperparameters", language="python")
+        st.code("AdaBoostRegressor()\n- Robust baseline\n- Better for complex data", language="python")
     
-    model_lr = LinearRegression()
-    model_lr.fit(X_train_scaled, y_train)
-    y_pred_lr = model_lr.predict(X_test_scaled)
-    y_train_lr = model_lr.predict(X_train_scaled)
+    model_ada = AdaBoostRegressor(n_estimators=100, random_state=42, learning_rate=0.1)
+    model_ada.fit(X_train_scaled, y_train)
+    y_pred_ada = model_ada.predict(X_test_scaled)
+    y_train_ada = model_ada.predict(X_train_scaled)
     
-    r2_lr = r2_score(y_test, y_pred_lr)
-    rmse_lr = np.sqrt(mean_squared_error(y_test, y_pred_lr))
-    mae_lr = mean_absolute_error(y_test, y_pred_lr)
-    mape_lr = mean_absolute_percentage_error(y_test, y_pred_lr)
-    r2_train_lr = r2_score(y_train, y_train_lr)
+    r2_ada = r2_score(y_test, y_pred_ada)
+    rmse_ada = np.sqrt(mean_squared_error(y_test, y_pred_ada))
+    mae_ada = mean_absolute_error(y_test, y_pred_ada)
+    mape_ada = mean_absolute_percentage_error(y_test, y_pred_ada)
+    r2_train_ada = r2_score(y_train, y_train_ada)
     
     with col2:
-        st.metric("R²", f"{r2_lr:.4f}")
-        st.metric("RMSE", f"RM{rmse_lr:,.0f}")
-        st.metric("MAE", f"RM{mae_lr:,.0f}")
+        st.metric("R²", f"{r2_ada:.4f}")
+        st.metric("RMSE", f"RM{rmse_ada:,.0f}")
+        st.metric("MAE", f"RM{mae_ada:,.0f}")
     
     # MODEL 2: RIDGE
     progress.progress(40)
@@ -688,7 +687,7 @@ elif page == "⚙️ Model Training":
     st.success("✅ Training complete with 5-Fold CV!")
     
     st.session_state.results = {
-        'Linear Regression': {'R²': r2_lr, 'RMSE': rmse_lr, 'MAE': mae_lr, 'MAPE': mape_lr, 'train_r2': r2_train_lr, 'pred': y_pred_lr},
+        'AdaBoost': {'R²': r2_ada, 'RMSE': rmse_ada, 'MAE': mae_ada, 'MAPE': mape_ada, 'train_r2': r2_train_ada, 'pred': y_pred_ada},
         'Ridge': {'R²': r2_ridge, 'RMSE': rmse_ridge, 'MAE': mae_ridge, 'MAPE': mape_ridge, 'train_r2': r2_train_ridge, 'pred': y_pred_ridge},
         'Gradient Boosting': {'R²': r2_gb, 'RMSE': rmse_gb, 'MAE': mae_gb, 'MAPE': mape_gb, 'train_r2': r2_train_gb, 'pred': y_pred_gb},
         'Random Forest': {'R²': r2_rf, 'RMSE': rmse_rf, 'MAE': mae_rf, 'MAPE': mape_rf, 'train_r2': r2_train_rf, 'pred': y_pred_rf}
@@ -696,7 +695,7 @@ elif page == "⚙️ Model Training":
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION - CLEAN WITH RM VALUES
+# PAGE 7: MODEL EVALUATION - PROPER MAPE DISPLAY
 # ============================================================================
 elif page == "🏆 Model Evaluation":
     st.header("🏆 R² | RMSE | MAE | MAPE")
@@ -722,7 +721,7 @@ elif page == "🏆 Model Evaluation":
         mae_norm = normalize_to_01(mae_raw) * 100
         mape_norm = normalize_to_01(mape_raw) * 100
         
-        # Create results dataframe with RM values
+        # Create results dataframe with proper RM and % values
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
             'R² (%)': [f"{r:.2f}%" for r in r2_norm],
@@ -734,8 +733,8 @@ elif page == "🏆 Model Evaluation":
         st.subheader("📊 Evaluation Metrics (Normalized & Raw RM Values)")
         st.dataframe(norm_df, use_container_width=True)
         
-        # Visualization
-        fig = plt.figure(figsize=(16, 10))
+        # Visualization - 2x2 Grid
+        fig = plt.figure(figsize=(14, 10))
         gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
         
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
@@ -748,7 +747,7 @@ elif page == "🏆 Model Evaluation":
         ax1.set_ylabel('R² (%)', fontweight='bold')
         ax1.set_title('R²', fontweight='bold', fontsize=14)
         ax1.set_xticks(range(len(models)))
-        ax1.set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        ax1.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax1.set_ylim([0, 100])
         ax1.grid(alpha=0.3, axis='y')
         ax1.legend(fontsize=8)
@@ -757,38 +756,38 @@ elif page == "🏆 Model Evaluation":
         
         # RMSE in RM
         ax2 = fig.add_subplot(gs[0, 1])
-        bars = ax2.bar(range(len(models)), rmse_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax2.set_ylabel('RMSE (RM)', fontweight='bold')
+        bars = ax2.bar(range(len(models)), rmse_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax2.set_ylabel('RMSE (RM \'000)', fontweight='bold')
         ax2.set_title('RMSE', fontweight='bold', fontsize=14)
         ax2.set_xticks(range(len(models)))
-        ax2.set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        ax2.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax2.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, rmse_raw):
-            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val/1000:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, rmse_raw/1000):
+            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         # MAE in RM
         ax3 = fig.add_subplot(gs[1, 0])
-        bars = ax3.bar(range(len(models)), mae_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax3.set_ylabel('MAE (RM)', fontweight='bold')
+        bars = ax3.bar(range(len(models)), mae_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax3.set_ylabel('MAE (RM \'000)', fontweight='bold')
         ax3.set_title('MAE', fontweight='bold', fontsize=14)
         ax3.set_xticks(range(len(models)))
-        ax3.set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        ax3.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax3.grid(alpha=0.3, axis='y')
-        for bar, val in zip(bars, mae_raw):
-            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val/1000:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, mae_raw/1000):
+            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # MAPE in %
+        # MAPE in % - PROPERLY DISPLAYED
         ax4 = fig.add_subplot(gs[1, 1])
         bars = ax4.bar(range(len(models)), mape_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax4.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
         ax4.set_ylabel('MAPE (%)', fontweight='bold')
         ax4.set_title('MAPE', fontweight='bold', fontsize=14)
         ax4.set_xticks(range(len(models)))
-        ax4.set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        ax4.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax4.grid(alpha=0.3, axis='y')
         ax4.legend(fontsize=8)
         for bar, val in zip(bars, mape_raw):
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         plt.suptitle('MODEL EVALUATION METRICS', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
@@ -808,7 +807,7 @@ elif page == "🏆 Model Evaluation":
         axes[0].bar(x_pos - width/2, train_r2s, width, label='Train R²', color='#2ecc71', alpha=0.7, edgecolor='black')
         axes[0].bar(x_pos + width/2, test_r2s, width, label='Test R²', color='#e74c3c', alpha=0.7, edgecolor='black')
         axes[0].set_xticks(x_pos)
-        axes[0].set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        axes[0].set_xticklabels([m for m in models], fontsize=9)
         axes[0].set_ylabel('R² Score', fontweight='bold')
         axes[0].set_title('Overfitting Analysis', fontweight='bold')
         axes[0].legend(fontsize=9)
@@ -838,4 +837,4 @@ elif page == "🏆 Model Evaluation":
         col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data**")
+st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data | AdaBoost Baseline**")
