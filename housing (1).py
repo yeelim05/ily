@@ -15,12 +15,11 @@ import logging
 logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
 logging.getLogger('datasets').setLevel(logging.ERROR)
 
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold, cross_val_score
-from sklearn.preprocessing import StandardScaler, RobustScaler, PowerTransformer, QuantileTransformer, LabelEncoder
-from sklearn.linear_model import Ridge, Lasso, ElasticNet
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, StackingRegressor
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.preprocessing import StandardScaler, RobustScaler, PowerTransformer, LabelEncoder
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
-from sklearn.neighbors import KNeighborsRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
 
 sns.set_theme(style="whitegrid", palette="husl")
@@ -53,7 +52,6 @@ def load_huggingface_data():
             'median_psf': 500 + np.random.normal(0, 150, 2000),
             'transactions': 50 + np.random.normal(0, 40, 2000),
         })
-        # Ensure positive values
         df['median_price'] = np.abs(df['median_price'])
         df['median_psf'] = np.abs(df['median_psf'])
         df['transactions'] = np.abs(df['transactions'])
@@ -142,7 +140,6 @@ if page == "📊 Dataset Overview":
             try:
                 min_val = df_original[col].min()
                 max_val = df_original[col].max()
-                mean_val = df_original[col].mean()
                 if pd.isna(min_val) or pd.isna(max_val):
                     min_str = "N/A"
                     max_str = "N/A"
@@ -227,7 +224,7 @@ elif page == "🔍 Initial EDA":
     
     ax2 = fig.add_subplot(gs[0, 1])
     numeric_cols = df_original.select_dtypes(include=[np.number]).columns.tolist()
-    if len(numeric_cols) > 1:
+    if len(numeric_cols) > 1 and target_col in numeric_df.columns:
         corr_with_target = numeric_df.corr()[target_col].sort_values(ascending=False)
         colors = ['#2ecc71' if x > 0 else '#e74c3c' for x in corr_with_target.values]
         ax2.barh(range(len(corr_with_target)), corr_with_target.values, color=colors, alpha=0.7)
@@ -336,7 +333,7 @@ elif page == "🧹 Data Cleaning":
     st.info(f"📊 Records removed: {total_removed:,} ({total_removed/initial_rows*100:.1f}%)")
 
 # ============================================================================
-# PAGE 4: FEATURE ENGINEERING
+# PAGE 4: FEATURE ENGINEERING - FIXED
 # ============================================================================
 elif page == "🔧 Feature Engineering":
     st.header("🔧 FEATURE ENGINEERING - PROPER NORMALIZATION")
@@ -354,51 +351,50 @@ elif page == "🔧 Feature Engineering":
     numerical_cols = df_fe.select_dtypes(include=[np.number]).columns.tolist()
     
     if len(numerical_cols) > 0:
-        df_transformed = df_fe.copy()
+        # BEFORE transformation
+        before_stats = df_fe[numerical_cols].describe().round(3)
         
-        # LOG TRANSFORMATION for skewed data
+        # Log transformation
+        df_fe_transformed = df_fe.copy()
         for col in numerical_cols:
-            if col != target_col:
-                df_transformed[col + '_log'] = np.log1p(df_transformed[col])
-                df_fe.drop(col, axis=1, inplace=True)
+            df_fe_transformed[col] = np.log1p(df_fe_transformed[col])
         
-        # Target Log Transform
-        df_transformed[target_col + '_log'] = np.log1p(df_transformed[target_col])
+        # AFTER transformation
+        after_stats = df_fe_transformed[numerical_cols].describe().round(3)
         
         col1, col2 = st.columns(2)
         with col1:
             st.write("**Before Log Transformation:**")
-            st.dataframe(df_fe[numerical_cols].describe().round(3), use_container_width=True)
+            st.dataframe(before_stats, use_container_width=True)
         
         with col2:
             st.write("**After Log Transformation:**")
-            log_cols = [c for c in df_transformed.columns if '_log' in c]
-            st.dataframe(df_transformed[log_cols].describe().round(3), use_container_width=True)
+            st.dataframe(after_stats, use_container_width=True)
         
         st.info("✅ Log transformation applied - Reduces skewness for better scaling")
         
-        st.subheader("📝 Step 2: Feature Encoding & Creation")
+        st.subheader("📝 Step 2: Feature Encoding")
         
-        categorical_cols = df_fe.select_dtypes(include=['object']).columns.tolist()
-        df_encoded = df_transformed.copy()
+        categorical_cols = df_fe_transformed.select_dtypes(include=['object']).columns.tolist()
+        df_encoded = df_fe_transformed.copy()
         
         for col in categorical_cols:
             le = LabelEncoder()
             df_encoded[col + '_encoded'] = le.fit_transform(df_encoded[col].astype(str))
         
-        initial_features = len(df_encoded.columns) - 1
+        initial_features = len(numerical_cols)
         final_features = len(df_encoded.columns) - 1
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Initial Features", f"{initial_features}")
+            st.metric("Numerical Features", f"{initial_features}")
         with col2:
             st.metric("After Encoding", f"{final_features}")
         
         fig, ax = plt.subplots(figsize=(10, 5))
         
         stages = ['Original', 'Log Transform', 'Encoded']
-        counts = [len(numerical_cols), len(numerical_cols), final_features]
+        counts = [initial_features, initial_features, final_features]
         bars = ax.bar(stages, counts, color=['#3498db', '#e74c3c', '#2ecc71'], alpha=0.7, edgecolor='black', linewidth=2)
         ax.set_ylabel('Feature Count', fontweight='bold')
         ax.set_title('Feature Engineering Pipeline', fontweight='bold')
@@ -411,7 +407,7 @@ elif page == "🔧 Feature Engineering":
         plt.close()
 
 # ============================================================================
-# PAGE 5: DATA PREPARATION - PROPER SCALING
+# PAGE 5: DATA PREPARATION - PROPER SCALING - FIXED
 # ============================================================================
 elif page == "📋 Data Preparation":
     st.header("📋 DATA PREPARATION - ADVANCED SCALING")
@@ -421,7 +417,7 @@ elif page == "📋 Data Preparation":
     - ✅ Log transformation for skewed data
     - ✅ RobustScaler for outlier resistance
     - ✅ PowerTransformer for Gaussian-like distribution
-    - ✅ Train-test split with stratification
+    - ✅ Train-test split
     """)
     
     df_prep = df_original.copy()
@@ -452,7 +448,7 @@ elif page == "📋 Data Preparation":
         encoding_info.append({
             'Column': col,
             'Unique Values': df_prep[col].nunique(),
-            'Encoding': '→ Numerical (LabelEncoder)'
+            'Encoding': '→ Numerical'
         })
     
     if len(encoding_info) > 0:
@@ -478,12 +474,10 @@ elif page == "📋 Data Preparation":
     
     st.subheader("Step 4: Advanced Scaling (RobustScaler + PowerTransformer)")
     
-    # RobustScaler - resistant to outliers
     robust_scaler = RobustScaler()
     X_train_scaled = robust_scaler.fit_transform(X_train)
     X_test_scaled = robust_scaler.transform(X_test)
     
-    # PowerTransformer - transforms to Gaussian-like
     power_transformer = PowerTransformer(method='yeo-johnson')
     X_train_scaled = power_transformer.fit_transform(X_train_scaled)
     X_test_scaled = power_transformer.transform(X_test_scaled)
@@ -528,7 +522,7 @@ elif page == "📋 Data Preparation":
     ax4.grid(alpha=0.3, axis='y')
     ax4.legend()
     
-    plt.suptitle('ADVANCED DATA PREPARATION (LOG + ROBUST + POWER)', fontsize=13, fontweight='bold')
+    plt.suptitle('ADVANCED DATA PREPARATION', fontsize=13, fontweight='bold')
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
@@ -539,20 +533,20 @@ elif page == "📋 Data Preparation":
     
     1. **Log Transformation** - Reduces skewness
     2. **RobustScaler** - Resistant to outliers (uses IQR)
-    3. **PowerTransformer** - Yeo-Johnson method for Gaussian-like distribution
-    4. **Train-Test Split** - 85% train, 15% test
+    3. **PowerTransformer** - Yeo-Johnson method
+    4. **Train-Test Split** - 85/15
     
-    **Result:** Optimal scaling for model training! ✅
+    **Result:** Optimal scaling! ✅
     """
     
     st.info(summary)
 
 # ============================================================================
-# PAGE 6: MODEL TRAINING - ADVANCED ENSEMBLE
+# PAGE 6: MODEL TRAINING
 # ============================================================================
 elif page == "⚙️ Model Training":
     st.header("⚙️ ADVANCED MODEL TRAINING (5-Fold CV)")
-    st.info("🔄 Training advanced ensemble models with **5-Fold Cross-Validation**...")
+    st.info("🔄 Training advanced models with **5-Fold Cross-Validation**...")
     
     df_train = df_original.copy()
     df_train = df_train.drop_duplicates()
@@ -562,7 +556,7 @@ elif page == "⚙️ Model Training":
     Q5 = df_train[target_col].quantile(0.05)
     df_train = df_train[(df_train[target_col] >= Q5) & (df_train[target_col] <= Q95)].copy()
     
-    # Log transform numerical columns
+    # Log transform numerical
     numerical_cols = df_train.select_dtypes(include=[np.number]).columns.tolist()
     for col in numerical_cols:
         df_train[col] = np.log1p(df_train[col])
@@ -589,10 +583,13 @@ elif page == "⚙️ Model Training":
     X_train_scaled = power_transformer.fit_transform(X_train_scaled)
     X_test_scaled = power_transformer.transform(X_test_scaled)
     
+    X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
+    X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns)
+    
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     progress = st.progress(0)
     
-    # MODEL 1: GRADIENT BOOSTING (Main)
+    # MODEL 1: GRADIENT BOOSTING
     progress.progress(25)
     st.subheader("1️⃣ Gradient Boosting Regressor")
     col1, col2 = st.columns([1.5, 1])
@@ -600,19 +597,12 @@ elif page == "⚙️ Model Training":
         st.code("""GradientBoostingRegressor()
 n_estimators=500
 learning_rate=0.05
-max_depth: [5, 6, 7]
-subsample: [0.8, 0.9, 1.0]
-min_samples_split: 5
-min_samples_leaf: 2""", language="python")
+max_depth=[5,6,7]
+subsample=[0.8,0.9,1.0]""", language="python")
     
     gb_search = GridSearchCV(
         GradientBoostingRegressor(random_state=42, min_samples_split=5, min_samples_leaf=2),
-        {
-            'n_estimators': [500],
-            'learning_rate': [0.05],
-            'max_depth': [5, 6, 7],
-            'subsample': [0.8, 0.9, 1.0]
-        },
+        {'n_estimators': [500], 'learning_rate': [0.05], 'max_depth': [5, 6, 7], 'subsample': [0.8, 0.9, 1.0]},
         cv=kfold, scoring='r2', n_jobs=-1, verbose=0
     )
     gb_search.fit(X_train_scaled, y_train)
@@ -627,7 +617,7 @@ min_samples_leaf: 2""", language="python")
     
     with col2:
         st.metric("R²", f"{r2_gb:.4f}")
-        st.metric("RMSE (Log)", f"{rmse_gb:.4f}")
+        st.metric("RMSE", f"{rmse_gb:.4f}")
         st.metric("MAPE", f"{mape_gb:.2f}%")
     
     # MODEL 2: RANDOM FOREST
@@ -637,19 +627,12 @@ min_samples_leaf: 2""", language="python")
     with col1:
         st.code("""RandomForestRegressor()
 n_estimators=300
-max_depth: [15, 20, 25]
-min_samples_leaf: [1, 2, 3]
-max_features: ['sqrt', 'log2']
-GridSearchCV""", language="python")
+max_depth=[15,20,25]
+min_samples_leaf=[1,2]""", language="python")
     
     rf_search = GridSearchCV(
         RandomForestRegressor(random_state=42, n_jobs=-1),
-        {
-            'n_estimators': [300],
-            'max_depth': [15, 20, 25],
-            'min_samples_leaf': [1, 2],
-            'max_features': ['sqrt']
-        },
+        {'n_estimators': [300], 'max_depth': [15, 20, 25], 'min_samples_leaf': [1, 2], 'max_features': ['sqrt']},
         cv=kfold, scoring='r2', n_jobs=-1, verbose=0
     )
     rf_search.fit(X_train_scaled, y_train)
@@ -664,7 +647,7 @@ GridSearchCV""", language="python")
     
     with col2:
         st.metric("R²", f"{r2_rf:.4f}")
-        st.metric("RMSE (Log)", f"{rmse_rf:.4f}")
+        st.metric("RMSE", f"{rmse_rf:.4f}")
         st.metric("MAPE", f"{mape_rf:.2f}%")
     
     # MODEL 3: RIDGE
@@ -674,8 +657,7 @@ GridSearchCV""", language="python")
     with col1:
         st.code("""Ridge(alpha=tuned)
 GridSearchCV
-alpha: [0.1, 1, 10, 100]
-cv=5""", language="python")
+alpha=[0.1,1,10,100]""", language="python")
     
     ridge_search = GridSearchCV(
         Ridge(random_state=42),
@@ -704,8 +686,8 @@ cv=5""", language="python")
     with col1:
         st.code("""SVR(kernel='rbf')
 GridSearchCV
-C: [10, 100, 1000]
-gamma: ['scale', 0.001, 0.01]""", language="python")
+C=[10,100,1000]
+gamma=['scale',0.001]""", language="python")
     
     svr_search = GridSearchCV(
         SVR(kernel='rbf'),
@@ -768,7 +750,7 @@ elif page == "🏆 Model Evaluation":
         st.info("""
         **Interpretation (Log-Transformed Data):**
         - **R² > 0.85:** Excellent fit ✅
-        - **RMSE/MAE:** Values on log scale (convert back using exp() for original RM)
+        - **RMSE/MAE:** Values on log scale (exp() to convert back)
         - **MAPE < 8%:** Excellent predictions ✅
         """)
         
