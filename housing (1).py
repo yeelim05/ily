@@ -385,7 +385,7 @@ elif page == "🔧 Feature Engineering":
         plt.close()
 
 # ============================================================================
-# PAGE 5: DATA PREPARATION
+# PAGE 5: DATA PREPARATION - FIXED
 # ============================================================================
 elif page == "📋 Data Preparation":
     st.header("📋 DATA PREPARATION - COMPLETE PIPELINE")
@@ -474,6 +474,7 @@ elif page == "📋 Data Preparation":
     - Features: {X_train.shape[1]}
     """)
     
+    # Visualization - FIXED TO 2x2 GRID
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
     
@@ -492,26 +493,21 @@ elif page == "📋 Data Preparation":
     for i, v in enumerate(split_sizes):
         ax2.text(i, v + 10, f'{v:,}', ha='center', fontweight='bold')
     
-    ax3 = fig.add_subplot(gs[0, 2])
-    ax3.text(0.5, 0.6, f'{X_train.shape[1]}', ha='center', va='center', fontsize=24, fontweight='bold', transform=ax3.transAxes, color='#2ecc71')
-    ax3.text(0.5, 0.25, 'Features', ha='center', va='center', fontsize=12, fontweight='bold', transform=ax3.transAxes)
-    ax3.axis('off')
-    
     sample_col = numerical_features[0] if len(numerical_features) > 0 else X_train.columns[0]
     
-    ax4 = fig.add_subplot(gs[1, 0:2])
-    ax4.hist(X_train[sample_col], bins=30, color='#e74c3c', alpha=0.7, edgecolor='black', label='Before')
-    ax4.set_title(f'Before Scaling: {sample_col}', fontweight='bold')
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax3.hist(X_train[sample_col], bins=30, color='#e74c3c', alpha=0.7, edgecolor='black', label='Before')
+    ax3.set_title(f'Before Scaling: {sample_col}', fontweight='bold')
+    ax3.set_ylabel('Frequency', fontweight='bold')
+    ax3.grid(alpha=0.3, axis='y')
+    ax3.legend()
+    
+    ax4 = fig.add_subplot(gs[1, 1])
+    ax4.hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black', label='After')
+    ax4.set_title(f'After Scaling: {sample_col}', fontweight='bold')
     ax4.set_ylabel('Frequency', fontweight='bold')
     ax4.grid(alpha=0.3, axis='y')
     ax4.legend()
-    
-    ax5 = fig.add_subplot(gs[1, 2])
-    ax5.hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black', label='After')
-    ax5.set_title(f'After Scaling: {sample_col}', fontweight='bold')
-    ax5.set_ylabel('Frequency', fontweight='bold')
-    ax5.grid(alpha=0.3, axis='y')
-    ax5.legend()
     
     plt.suptitle('PREPARING & PREPROCESSING DATASET (4 STEPS)', fontsize=13, fontweight='bold')
     st.pyplot(fig, use_container_width=True)
@@ -544,7 +540,7 @@ elif page == "📋 Data Preparation":
     st.info(summary)
 
 # ============================================================================
-# PAGE 6: MODEL TRAINING - WITH NEW BASELINE
+# PAGE 6: MODEL TRAINING
 # ============================================================================
 elif page == "⚙️ Model Training":
     st.header("⚙️ MODEL TRAINING (5-Fold CV)")
@@ -588,14 +584,18 @@ elif page == "⚙️ Model Training":
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     progress = st.progress(0)
     
-    # MODEL 1: ADABOOST (NEW BASELINE - Better for Housing)
+    # MODEL 1: ADABOOST WITH HYPERPARAMETERS
     progress.progress(20)
     st.subheader("1️⃣ AdaBoost Regressor (Baseline)")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("AdaBoostRegressor()\n- Robust baseline\n- Better for complex data", language="python")
+        st.code("""AdaBoostRegressor()
+n_estimators=100
+learning_rate=0.1
+loss='linear'
+Hyperparameters tuned""", language="python")
     
-    model_ada = AdaBoostRegressor(n_estimators=100, random_state=42, learning_rate=0.1)
+    model_ada = AdaBoostRegressor(n_estimators=100, learning_rate=0.1, loss='linear', random_state=42)
     model_ada.fit(X_train_scaled, y_train)
     y_pred_ada = model_ada.predict(X_test_scaled)
     y_train_ada = model_ada.predict(X_train_scaled)
@@ -603,20 +603,23 @@ elif page == "⚙️ Model Training":
     r2_ada = r2_score(y_test, y_pred_ada)
     rmse_ada = np.sqrt(mean_squared_error(y_test, y_pred_ada))
     mae_ada = mean_absolute_error(y_test, y_pred_ada)
-    mape_ada = mean_absolute_percentage_error(y_test, y_pred_ada)
+    mape_ada = mean_absolute_percentage_error(y_test, y_pred_ada) * 100
     r2_train_ada = r2_score(y_train, y_train_ada)
     
     with col2:
         st.metric("R²", f"{r2_ada:.4f}")
-        st.metric("RMSE", f"RM{rmse_ada:,.0f}")
-        st.metric("MAE", f"RM{mae_ada:,.0f}")
+        st.metric("RMSE", f"RM{rmse_ada:,.0f}" if rmse_ada >= 1 else f"RM{rmse_ada:.2f}")
+        st.metric("MAPE", f"{mape_ada:.2f}%")
     
     # MODEL 2: RIDGE
     progress.progress(40)
     st.subheader("2️⃣ Ridge Regression")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("Ridge(alpha=tuned)\nGridSearchCV\nalpha: [0.001...1000]", language="python")
+        st.code("""Ridge(alpha=tuned)
+GridSearchCV
+alpha: [0.001...1000]
+5-Fold CV""", language="python")
     
     ridge_search = GridSearchCV(Ridge(random_state=42), {'alpha': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}, 
                                 cv=kfold, scoring='r2', n_jobs=-1)
@@ -627,20 +630,24 @@ elif page == "⚙️ Model Training":
     r2_ridge = r2_score(y_test, y_pred_ridge)
     rmse_ridge = np.sqrt(mean_squared_error(y_test, y_pred_ridge))
     mae_ridge = mean_absolute_error(y_test, y_pred_ridge)
-    mape_ridge = mean_absolute_percentage_error(y_test, y_pred_ridge)
+    mape_ridge = mean_absolute_percentage_error(y_test, y_pred_ridge) * 100
     r2_train_ridge = r2_score(y_train, y_train_ridge)
     
     with col2:
         st.metric("R²", f"{r2_ridge:.4f}")
         st.metric("Best α", f"{ridge_search.best_params_['alpha']}")
-        st.metric("RMSE", f"RM{rmse_ridge:,.0f}")
+        st.metric("MAPE", f"{mape_ridge:.2f}%")
     
     # MODEL 3: GRADIENT BOOSTING
     progress.progress(60)
     st.subheader("3️⃣ Gradient Boosting")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("GradientBoosting()\nn_estimators=300\nmax_depth: [4, 5, 6]", language="python")
+        st.code("""GradientBoosting()
+n_estimators=300
+learning_rate=0.1
+max_depth: [4, 5, 6]
+subsample: [0.8, 1.0]""", language="python")
     
     gb_search = GridSearchCV(GradientBoostingRegressor(n_estimators=300, learning_rate=0.1, random_state=42),
                              {'max_depth': [4, 5, 6], 'subsample': [0.8, 1.0]}, cv=kfold, scoring='r2', n_jobs=-1)
@@ -651,20 +658,24 @@ elif page == "⚙️ Model Training":
     r2_gb = r2_score(y_test, y_pred_gb)
     rmse_gb = np.sqrt(mean_squared_error(y_test, y_pred_gb))
     mae_gb = mean_absolute_error(y_test, y_pred_gb)
-    mape_gb = mean_absolute_percentage_error(y_test, y_pred_gb)
+    mape_gb = mean_absolute_percentage_error(y_test, y_pred_gb) * 100
     r2_train_gb = r2_score(y_train, y_train_gb)
     
     with col2:
         st.metric("R²", f"{r2_gb:.4f}")
         st.metric("Best Depth", f"{gb_search.best_params_['max_depth']}")
-        st.metric("RMSE", f"RM{rmse_gb:,.0f}")
+        st.metric("MAPE", f"{mape_gb:.2f}%")
     
     # MODEL 4: RANDOM FOREST
     progress.progress(80)
     st.subheader("4️⃣ Random Forest")
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.code("RandomForest()\nn_estimators=150\nmax_depth: [15, 20, 25]", language="python")
+        st.code("""RandomForest()
+n_estimators=150
+max_depth: [15, 20, 25]
+min_samples_leaf: [2, 4]
+GridSearchCV""", language="python")
     
     rf_search = GridSearchCV(RandomForestRegressor(n_estimators=150, random_state=42, n_jobs=-1),
                              {'max_depth': [15, 20, 25], 'min_samples_leaf': [2, 4]}, cv=kfold, scoring='r2', n_jobs=-1)
@@ -675,13 +686,13 @@ elif page == "⚙️ Model Training":
     r2_rf = r2_score(y_test, y_pred_rf)
     rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
     mae_rf = mean_absolute_error(y_test, y_pred_rf)
-    mape_rf = mean_absolute_percentage_error(y_test, y_pred_rf)
+    mape_rf = mean_absolute_percentage_error(y_test, y_pred_rf) * 100
     r2_train_rf = r2_score(y_train, y_train_rf)
     
     with col2:
         st.metric("R²", f"{r2_rf:.4f}")
         st.metric("Best Depth", f"{rf_search.best_params_['max_depth']}")
-        st.metric("RMSE", f"RM{rmse_rf:,.0f}")
+        st.metric("MAPE", f"{mape_rf:.2f}%")
     
     progress.progress(100)
     st.success("✅ Training complete with 5-Fold CV!")
@@ -695,7 +706,7 @@ elif page == "⚙️ Model Training":
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION - PROPER MAPE DISPLAY
+# PAGE 7: MODEL EVALUATION
 # ============================================================================
 elif page == "🏆 Model Evaluation":
     st.header("🏆 R² | RMSE | MAE | MAPE")
@@ -710,27 +721,18 @@ elif page == "🏆 Model Evaluation":
         r2_raw = np.array([v['R²'] for v in results.values()])
         rmse_raw = np.array([v['RMSE'] for v in results.values()])
         mae_raw = np.array([v['MAE'] for v in results.values()])
-        mape_raw = np.array([v['MAPE'] * 100 for v in results.values()])
+        mape_raw = np.array([v['MAPE'] for v in results.values()])
         
-        # Normalize using Min-Max Scaling to [0, 100%]
-        def normalize_to_01(arr):
-            return (arr - arr.min()) / (arr.max() - arr.min() + 1e-10)
-        
-        r2_norm = normalize_to_01(r2_raw) * 100
-        rmse_norm = normalize_to_01(rmse_raw) * 100
-        mae_norm = normalize_to_01(mae_raw) * 100
-        mape_norm = normalize_to_01(mape_raw) * 100
-        
-        # Create results dataframe with proper RM and % values
+        # Create results dataframe
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
-            'R² (%)': [f"{r:.2f}%" for r in r2_norm],
-            'RMSE (RM)': [f"RM{rm:,.0f}" for rm in rmse_raw],
-            'MAE (RM)': [f"RM{ma:,.0f}" for ma in mae_raw],
-            'MAPE (%)': [f"{mp:.2f}%" for mp in mape_raw]
+            'R²': [f"{r:.4f}" for r in r2_raw],
+            'RMSE (RM)': [f"RM{rm:,.0f}" if rm >= 1 else f"RM{rm:.2f}" for rm in rmse_raw],
+            'MAE (RM)': [f"RM{ma:,.0f}" if ma >= 1 else f"RM{ma:.2f}" for ma in mae_raw],
+            'MAPE': [f"{mp:.2f}%" for mp in mape_raw]
         })
         
-        st.subheader("📊 Evaluation Metrics (Normalized & Raw RM Values)")
+        st.subheader("📊 Model Evaluation Metrics")
         st.dataframe(norm_df, use_container_width=True)
         
         # Visualization - 2x2 Grid
@@ -740,21 +742,19 @@ elif page == "🏆 Model Evaluation":
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
         models = list(results.keys())
         
-        # R² Normalized
+        # R² Score
         ax1 = fig.add_subplot(gs[0, 0])
-        bars = ax1.bar(range(len(models)), r2_norm, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax1.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
-        ax1.set_ylabel('R² (%)', fontweight='bold')
+        bars = ax1.bar(range(len(models)), r2_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax1.set_ylabel('R² Score', fontweight='bold')
         ax1.set_title('R²', fontweight='bold', fontsize=14)
         ax1.set_xticks(range(len(models)))
         ax1.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
-        ax1.set_ylim([0, 100])
+        ax1.set_ylim([0, 1.0])
         ax1.grid(alpha=0.3, axis='y')
-        ax1.legend(fontsize=8)
-        for bar, val in zip(bars, r2_norm):
-            ax1.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, r2_raw):
+            ax1.text(bar.get_x() + bar.get_width()/2, val + 0.02, f'{val:.3f}', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # RMSE in RM
+        # RMSE
         ax2 = fig.add_subplot(gs[0, 1])
         bars = ax2.bar(range(len(models)), rmse_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax2.set_ylabel('RMSE (RM \'000)', fontweight='bold')
@@ -763,9 +763,10 @@ elif page == "🏆 Model Evaluation":
         ax2.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax2.grid(alpha=0.3, axis='y')
         for bar, val in zip(bars, rmse_raw/1000):
-            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            label = f'RM{val:.1f}k' if val >= 1 else f'RM{val*1000:.0f}'
+            ax2.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # MAE in RM
+        # MAE
         ax3 = fig.add_subplot(gs[1, 0])
         bars = ax3.bar(range(len(models)), mae_raw/1000, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax3.set_ylabel('MAE (RM \'000)', fontweight='bold')
@@ -774,26 +775,25 @@ elif page == "🏆 Model Evaluation":
         ax3.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax3.grid(alpha=0.3, axis='y')
         for bar, val in zip(bars, mae_raw/1000):
-            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            label = f'RM{val:.1f}k' if val >= 1 else f'RM{val*1000:.0f}'
+            ax3.text(bar.get_x() + bar.get_width()/2, val, label, ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # MAPE in % - PROPERLY DISPLAYED
+        # MAPE - CLEAN PERCENTAGE DISPLAY
         ax4 = fig.add_subplot(gs[1, 1])
         bars = ax4.bar(range(len(models)), mape_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax4.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
         ax4.set_ylabel('MAPE (%)', fontweight='bold')
         ax4.set_title('MAPE', fontweight='bold', fontsize=14)
         ax4.set_xticks(range(len(models)))
         ax4.set_xticklabels([m for m in models], fontsize=9, rotation=45, ha='right')
         ax4.grid(alpha=0.3, axis='y')
-        ax4.legend(fontsize=8)
         for bar, val in zip(bars, mape_raw):
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.1, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         plt.suptitle('MODEL EVALUATION METRICS', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
         plt.close()
         
-        # Best Model
+        # Best Model Analysis
         best_idx = np.argmax(r2_raw)
         best_pred = results[models[best_idx]]['pred']
         
@@ -831,10 +831,10 @@ elif page == "🏆 Model Evaluation":
         # Best Model Summary
         st.subheader(f"🏆 Best Model: {models[best_idx]}")
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("R²", f"{r2_norm[best_idx]:.2f}%")
-        col2.metric("RMSE", f"RM{rmse_raw[best_idx]:,.0f}")
-        col3.metric("MAE", f"RM{mae_raw[best_idx]:,.0f}")
+        col1.metric("R²", f"{r2_raw[best_idx]:.4f}")
+        col2.metric("RMSE", f"RM{rmse_raw[best_idx]:,.0f}" if rmse_raw[best_idx] >= 1 else f"RM{rmse_raw[best_idx]:.2f}")
+        col3.metric("MAE", f"RM{mae_raw[best_idx]:,.0f}" if mae_raw[best_idx] >= 1 else f"RM{mae_raw[best_idx]:.2f}")
         col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data | AdaBoost Baseline**")
+st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data**")
