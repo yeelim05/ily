@@ -138,12 +138,11 @@ if page == "📊 Dataset Overview":
         st.dataframe(df_original.describe().round(2), use_container_width=True)
 
 # ============================================================================
-# PAGE 2: INITIAL EDA - WITH ALL DIAGRAMS
+# PAGE 2: INITIAL EDA
 # ============================================================================
 elif page == "🔍 Initial EDA":
     st.header("🔍 INITIAL EXPLORATORY DATA ANALYSIS")
     
-    # ========== DIAGRAM 1: Price Distribution & Boxplot ==========
     st.subheader("📊 Diagram 1: Missing Values & Data Quality")
     
     fig = plt.figure(figsize=(14, 8))
@@ -174,15 +173,14 @@ elif page == "🔍 Initial EDA":
         ax4.set_title('Missing Values by Column', fontweight='bold')
         ax4.set_xlabel('Count')
     else:
-        ax4.text(0.5, 0.5, '✅ No Missing Values', ha='center', va='center', fontsize=14, fontweight='bold')
+        ax4.text(0.5, 0.5, '✅ No Missing Values', ha='center', va='center', fontsize=14, fontweight='bold', transform=ax4.transAxes)
         ax4.set_title('Missing Values Status', fontweight='bold')
-    ax4.axis('off' if len(missing_data) == 0 else 'on')
+        ax4.axis('off')
     
     plt.suptitle('MISSING VALUES & DATA QUALITY ASSESSMENT', fontsize=12, fontweight='bold')
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
-    # ========== DIAGRAM 2: Correlation & Pairplot ==========
     st.subheader("📊 Diagram 2: Correlation Between Variables")
     
     fig = plt.figure(figsize=(14, 6))
@@ -211,7 +209,6 @@ elif page == "🔍 Initial EDA":
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
-    # ========== DIAGRAM 3: Boxplot & Distribution Analysis ==========
     st.subheader("📊 Diagram 3: Boxplot Analysis for Features (X Values)")
     
     num_cols = df_original.select_dtypes(include=[np.number]).columns.tolist()
@@ -409,13 +406,6 @@ elif page == "📋 Data Preparation":
     Q5 = df_prep[target_col].quantile(0.05)
     df_prep = df_prep[(df_prep[target_col] >= Q5) & (df_prep[target_col] <= Q95)].copy()
     
-    # ========== DIAGRAM: 4 STEPS OF DATA PREPARATION ==========
-    st.subheader("📊 Diagram 4: Preparing & Preprocessing Dataset (4 Steps)")
-    
-    fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.3)
-    
-    # Step 1: Standardization
     st.subheader("Step 1: Data Standardization")
     
     minmax_scaler = MinMaxScaler()
@@ -425,7 +415,6 @@ elif page == "📋 Data Preparation":
         df_prep[numerical_cols] = minmax_scaler.fit_transform(df_prep[numerical_cols])
         st.success(f"✅ Standardized {len(numerical_cols)} numerical columns to [0, 1]")
     
-    # Step 2: Categorical Encoding
     st.subheader("Step 2: Categorical Data Encoding")
     
     categorical_cols = df_prep.select_dtypes(include=['object']).columns.tolist()
@@ -448,7 +437,6 @@ elif page == "📋 Data Preparation":
     
     df_prep = df_prep.drop(columns=categorical_cols)
     
-    # Step 3: Missing Values
     st.subheader("Step 3: Missing Values Handling")
     
     missing_count = df_prep.isnull().sum().sum()
@@ -461,7 +449,6 @@ elif page == "📋 Data Preparation":
     if missing_count == 0:
         st.success("✅ No missing values found")
     
-    # Step 4: Train-Test Split & Scaling
     st.subheader("Step 4: Train-Test Split & Feature Scaling")
     
     X = df_prep.drop(target_col, axis=1)
@@ -488,37 +475,46 @@ elif page == "📋 Data Preparation":
     """)
     
     # Visualization
-    fig, axes = plt.subplots(2, 2, figsize=(13, 10))
+    fig = plt.figure(figsize=(14, 8))
+    gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
     
     split_sizes = [X_train.shape[0], X_test.shape[0]]
     colors = ['#3498db', '#e74c3c']
-    axes[0, 0].pie(split_sizes, labels=['Train', 'Test'], autopct='%1.1f%%', colors=colors, startangle=90)
-    axes[0, 0].set_title('Train-Test Split Ratio', fontweight='bold')
     
-    axes[0, 1].bar(['Training', 'Test'], split_sizes, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
-    axes[0, 1].set_ylabel('Samples', fontweight='bold')
-    axes[0, 1].set_title('Dataset Sizes', fontweight='bold')
-    axes[0, 1].grid(alpha=0.3, axis='y')
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.pie(split_sizes, labels=['Train', 'Test'], autopct='%1.1f%%', colors=colors, startangle=90)
+    ax1.set_title('Train-Test Split Ratio', fontweight='bold')
+    
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.bar(['Training', 'Test'], split_sizes, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+    ax2.set_ylabel('Samples', fontweight='bold')
+    ax2.set_title('Dataset Sizes', fontweight='bold')
+    ax2.grid(alpha=0.3, axis='y')
     for i, v in enumerate(split_sizes):
-        axes[0, 1].text(i, v + 10, f'{v:,}', ha='center', fontweight='bold')
+        ax2.text(i, v + 10, f'{v:,}', ha='center', fontweight='bold')
     
-    axes[0, 2].text(0.5, 0.7, f'{X_train.shape[1]}', ha='center', va='center', fontsize=22, fontweight='bold', color='#2ecc71')
-    axes[0, 2].text(0.5, 0.3, 'Total Features', ha='center', va='center', fontsize=12, fontweight='bold')
-    axes[0, 2].axis('off')
+    ax3 = fig.add_subplot(gs[0, 2])
+    ax3.text(0.5, 0.6, f'{X_train.shape[1]}', ha='center', va='center', fontsize=24, fontweight='bold', transform=ax3.transAxes, color='#2ecc71')
+    ax3.text(0.5, 0.25, 'Features', ha='center', va='center', fontsize=12, fontweight='bold', transform=ax3.transAxes)
+    ax3.axis('off')
     
     sample_col = numerical_features[0] if len(numerical_features) > 0 else X_train.columns[0]
-    axes[1, 0].hist(X_train[sample_col], bins=30, color='#e74c3c', alpha=0.7, edgecolor='black')
-    axes[1, 0].set_title(f'Before Scaling: {sample_col}', fontweight='bold')
-    axes[1, 0].set_ylabel('Frequency', fontweight='bold')
-    axes[1, 0].grid(alpha=0.3, axis='y')
     
-    axes[1, 1].hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black')
-    axes[1, 1].set_title(f'After Scaling: {sample_col}', fontweight='bold')
-    axes[1, 1].set_ylabel('Frequency', fontweight='bold')
-    axes[1, 1].grid(alpha=0.3, axis='y')
+    ax4 = fig.add_subplot(gs[1, 0:2])
+    ax4.hist(X_train[sample_col], bins=30, color='#e74c3c', alpha=0.7, edgecolor='black', label='Before')
+    ax4.set_title(f'Before Scaling: {sample_col}', fontweight='bold')
+    ax4.set_ylabel('Frequency', fontweight='bold')
+    ax4.grid(alpha=0.3, axis='y')
+    ax4.legend()
+    
+    ax5 = fig.add_subplot(gs[1, 2])
+    ax5.hist(X_train_scaled[sample_col], bins=30, color='#2ecc71', alpha=0.7, edgecolor='black', label='After')
+    ax5.set_title(f'After Scaling: {sample_col}', fontweight='bold')
+    ax5.set_ylabel('Frequency', fontweight='bold')
+    ax5.grid(alpha=0.3, axis='y')
+    ax5.legend()
     
     plt.suptitle('PREPARING & PREPROCESSING DATASET (4 STEPS)', fontsize=13, fontweight='bold')
-    plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
     plt.close()
     
@@ -613,8 +609,8 @@ elif page == "⚙️ Model Training":
     
     with col2:
         st.metric("R²", f"{r2_lr:.4f}")
-        st.metric("RMSE", f"RM{rmse_lr/1000:.1f}k")
-        st.metric("MAE", f"RM{mae_lr/1000:.1f}k")
+        st.metric("RMSE", f"RM{rmse_lr:,.0f}")
+        st.metric("MAE", f"RM{mae_lr:,.0f}")
     
     # MODEL 2: RIDGE
     progress.progress(40)
@@ -638,7 +634,7 @@ elif page == "⚙️ Model Training":
     with col2:
         st.metric("R²", f"{r2_ridge:.4f}")
         st.metric("Best α", f"{ridge_search.best_params_['alpha']}")
-        st.metric("RMSE", f"RM{rmse_ridge/1000:.1f}k")
+        st.metric("RMSE", f"RM{rmse_ridge:,.0f}")
     
     # MODEL 3: GRADIENT BOOSTING
     progress.progress(60)
@@ -662,7 +658,7 @@ elif page == "⚙️ Model Training":
     with col2:
         st.metric("R²", f"{r2_gb:.4f}")
         st.metric("Best Depth", f"{gb_search.best_params_['max_depth']}")
-        st.metric("RMSE", f"RM{rmse_gb/1000:.1f}k")
+        st.metric("RMSE", f"RM{rmse_gb:,.0f}")
     
     # MODEL 4: RANDOM FOREST
     progress.progress(80)
@@ -686,7 +682,7 @@ elif page == "⚙️ Model Training":
     with col2:
         st.metric("R²", f"{r2_rf:.4f}")
         st.metric("Best Depth", f"{rf_search.best_params_['max_depth']}")
-        st.metric("RMSE", f"RM{rmse_rf/1000:.1f}k")
+        st.metric("RMSE", f"RM{rmse_rf:,.0f}")
     
     progress.progress(100)
     st.success("✅ Training complete with 5-Fold CV!")
@@ -700,10 +696,10 @@ elif page == "⚙️ Model Training":
     st.session_state.y_test = y_test
 
 # ============================================================================
-# PAGE 7: MODEL EVALUATION - NORMALIZED METRICS ONLY (<10%)
+# PAGE 7: MODEL EVALUATION - CLEAN WITH RM VALUES
 # ============================================================================
 elif page == "🏆 Model Evaluation":
-    st.header("🏆 MODEL EVALUATION & COMPARISON (NORMALIZED)")
+    st.header("🏆 R² | RMSE | MAE | MAPE")
     
     if 'results' not in st.session_state:
         st.warning("⚠️ Train models first!")
@@ -711,157 +707,135 @@ elif page == "🏆 Model Evaluation":
         results = st.session_state.results
         y_test = st.session_state.y_test
         
-        # ========== CALCULATE NORMALIZED METRICS ==========
         # Raw metrics
         r2_raw = np.array([v['R²'] for v in results.values()])
         rmse_raw = np.array([v['RMSE'] for v in results.values()])
         mae_raw = np.array([v['MAE'] for v in results.values()])
         mape_raw = np.array([v['MAPE'] * 100 for v in results.values()])
         
-        # Calculate price range for NRMSE
-        price_range = y_test.max() - y_test.min()
-        
-        # Normalize using Min-Max Scaling to [0, 1] (no negatives)
+        # Normalize using Min-Max Scaling to [0, 100%]
         def normalize_to_01(arr):
             return (arr - arr.min()) / (arr.max() - arr.min() + 1e-10)
         
-        r2_norm = normalize_to_01(r2_raw) * 100  # as percentage
-        rmse_norm = normalize_to_01(rmse_raw) * 100  # NRMSE
+        r2_norm = normalize_to_01(r2_raw) * 100
+        rmse_norm = normalize_to_01(rmse_raw) * 100
         mae_norm = normalize_to_01(mae_raw) * 100
         mape_norm = normalize_to_01(mape_raw) * 100
         
-        # Create results dataframe - NORMALIZED ONLY
+        # Create results dataframe with RM values
         norm_df = pd.DataFrame({
             'Model': list(results.keys()),
             'R² (%)': [f"{r:.2f}%" for r in r2_norm],
-            'NRMSE (%)': [f"{rm:.2f}%" for rm in rmse_norm],
-            'NMAE (%)': [f"{ma:.2f}%" for ma in mae_norm],
-            'NMAPE (%)': [f"{mp:.2f}%" for mp in mape_norm]
+            'RMSE (RM)': [f"RM{rm:,.0f}" for rm in rmse_raw],
+            'MAE (RM)': [f"RM{ma:,.0f}" for ma in mae_raw],
+            'MAPE (%)': [f"{mp:.2f}%" for mp in mape_raw]
         })
         
-        st.subheader("📊 Normalized Metrics (Min-Max Scaling to [0, 100%])")
+        st.subheader("📊 Evaluation Metrics (Normalized & Raw RM Values)")
         st.dataframe(norm_df, use_container_width=True)
         
-        st.info("""
-        **Normalization Method:**
-        - Formula: (value - min) / (max - min) × 100%
-        - Range: 0% to 100% (no negative values)
-        - All values < 10% = Highly Accurate ✅
-        - Comparison: Fair across all metric scales
-        """)
-        
-        # ========== VISUALIZATION ==========
+        # Visualization
         fig = plt.figure(figsize=(16, 10))
-        gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+        gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.35)
         
         colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
         models = list(results.keys())
         
-        # 1. R² Normalized
+        # R² Normalized
         ax1 = fig.add_subplot(gs[0, 0])
         bars = ax1.bar(range(len(models)), r2_norm, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
         ax1.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
-        ax1.set_ylabel('R² Normalized (%)', fontweight='bold')
-        ax1.set_title('R² Normalized (0-100%)', fontweight='bold')
+        ax1.set_ylabel('R² (%)', fontweight='bold')
+        ax1.set_title('R²', fontweight='bold', fontsize=14)
         ax1.set_xticks(range(len(models)))
-        ax1.set_xticklabels([m.split()[0] for m in models], fontsize=8, rotation=45, ha='right')
+        ax1.set_xticklabels([m.split()[0] for m in models], fontsize=9)
         ax1.set_ylim([0, 100])
         ax1.grid(alpha=0.3, axis='y')
         ax1.legend(fontsize=8)
         for bar, val in zip(bars, r2_norm):
-            ax1.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+            ax1.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # 2. RMSE Normalized
+        # RMSE in RM
         ax2 = fig.add_subplot(gs[0, 1])
-        bars = ax2.bar(range(len(models)), rmse_norm, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax2.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Highly Accurate (<10%)')
-        ax2.set_ylabel('NRMSE (%)', fontweight='bold')
-        ax2.set_title('NRMSE Normalized (0-100%)', fontweight='bold')
+        bars = ax2.bar(range(len(models)), rmse_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax2.set_ylabel('RMSE (RM)', fontweight='bold')
+        ax2.set_title('RMSE', fontweight='bold', fontsize=14)
         ax2.set_xticks(range(len(models)))
-        ax2.set_xticklabels([m.split()[0] for m in models], fontsize=8, rotation=45, ha='right')
-        ax2.set_ylim([0, 100])
+        ax2.set_xticklabels([m.split()[0] for m in models], fontsize=9)
         ax2.grid(alpha=0.3, axis='y')
-        ax2.legend(fontsize=8)
-        for bar, val in zip(bars, rmse_norm):
-            ax2.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, rmse_raw):
+            ax2.text(bar.get_x() + bar.get_width()/2, val, f'RM{val/1000:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # 3. MAE Normalized
+        # MAE in RM
         ax3 = fig.add_subplot(gs[1, 0])
-        bars = ax3.bar(range(len(models)), mae_norm, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax3.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
-        ax3.set_ylabel('NMAE (%)', fontweight='bold')
-        ax3.set_title('NMAE Normalized (0-100%)', fontweight='bold')
+        bars = ax3.bar(range(len(models)), mae_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax3.set_ylabel('MAE (RM)', fontweight='bold')
+        ax3.set_title('MAE', fontweight='bold', fontsize=14)
         ax3.set_xticks(range(len(models)))
-        ax3.set_xticklabels([m.split()[0] for m in models], fontsize=8, rotation=45, ha='right')
-        ax3.set_ylim([0, 100])
+        ax3.set_xticklabels([m.split()[0] for m in models], fontsize=9)
         ax3.grid(alpha=0.3, axis='y')
-        ax3.legend(fontsize=8)
-        for bar, val in zip(bars, mae_norm):
-            ax3.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, mae_raw):
+            ax3.text(bar.get_x() + bar.get_width()/2, val, f'RM{val/1000:.1f}k', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        # 4. MAPE Normalized
+        # MAPE in %
         ax4 = fig.add_subplot(gs[1, 1])
-        bars = ax4.bar(range(len(models)), mape_norm, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        ax4.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Highly Accurate (<10%)')
-        ax4.set_ylabel('NMAPE (%)', fontweight='bold')
-        ax4.set_title('NMAPE Normalized (0-100%)', fontweight='bold')
+        bars = ax4.bar(range(len(models)), mape_raw, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        ax4.axhline(y=10, color='green', linestyle='--', linewidth=2, alpha=0.7, label='Excellent (<10%)')
+        ax4.set_ylabel('MAPE (%)', fontweight='bold')
+        ax4.set_title('MAPE', fontweight='bold', fontsize=14)
         ax4.set_xticks(range(len(models)))
-        ax4.set_xticklabels([m.split()[0] for m in models], fontsize=8, rotation=45, ha='right')
-        ax4.set_ylim([0, 100])
+        ax4.set_xticklabels([m.split()[0] for m in models], fontsize=9)
         ax4.grid(alpha=0.3, axis='y')
         ax4.legend(fontsize=8)
-        for bar, val in zip(bars, mape_norm):
-            ax4.text(bar.get_x() + bar.get_width()/2, val + 2, f'{val:.2f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
+        for bar, val in zip(bars, mape_raw):
+            ax4.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
-        plt.suptitle('NORMALIZED METRICS (0-100% SCALE - NO NEGATIVE VALUES)', fontsize=13, fontweight='bold')
+        plt.suptitle('MODEL EVALUATION METRICS', fontsize=13, fontweight='bold')
         st.pyplot(fig, use_container_width=True)
         plt.close()
         
-        # ========== ADDITIONAL ANALYSIS ==========
-        fig2 = plt.figure(figsize=(15, 6))
-        gs2 = fig2.add_gridspec(1, 2, hspace=0.3, wspace=0.3)
+        # Best Model
+        best_idx = np.argmax(r2_raw)
+        best_pred = results[models[best_idx]]['pred']
+        
+        fig2, axes = plt.subplots(1, 2, figsize=(14, 5))
         
         # Overfitting Analysis
-        ax1 = fig2.add_subplot(gs2[0, 0])
         train_r2s = [results[m]['train_r2'] for m in models]
         test_r2s = r2_raw
         x_pos = np.arange(len(models))
         width = 0.35
-        ax1.bar(x_pos - width/2, train_r2s, width, label='Train R²', color='#2ecc71', alpha=0.7, edgecolor='black')
-        ax1.bar(x_pos + width/2, test_r2s, width, label='Test R²', color='#e74c3c', alpha=0.7, edgecolor='black')
-        ax1.set_xticks(x_pos)
-        ax1.set_xticklabels([m.split()[0] for m in models], fontsize=9)
-        ax1.set_ylabel('R² Score', fontweight='bold')
-        ax1.set_title('Overfitting Analysis', fontweight='bold')
-        ax1.legend(fontsize=9)
-        ax1.grid(alpha=0.3, axis='y')
+        axes[0].bar(x_pos - width/2, train_r2s, width, label='Train R²', color='#2ecc71', alpha=0.7, edgecolor='black')
+        axes[0].bar(x_pos + width/2, test_r2s, width, label='Test R²', color='#e74c3c', alpha=0.7, edgecolor='black')
+        axes[0].set_xticks(x_pos)
+        axes[0].set_xticklabels([m.split()[0] for m in models], fontsize=9)
+        axes[0].set_ylabel('R² Score', fontweight='bold')
+        axes[0].set_title('Overfitting Analysis', fontweight='bold')
+        axes[0].legend(fontsize=9)
+        axes[0].grid(alpha=0.3, axis='y')
         
         # Actual vs Predicted
-        best_idx = np.argmax(test_r2s)
-        best_pred = results[models[best_idx]]['pred']
-        
-        ax2 = fig2.add_subplot(gs2[0, 1])
-        ax2.scatter(y_test, best_pred, alpha=0.5, s=20, color='#3498db', edgecolors='black')
+        axes[1].scatter(y_test, best_pred, alpha=0.5, s=20, color='#3498db', edgecolors='black')
         min_v = min(y_test.min(), best_pred.min())
         max_v = max(y_test.max(), best_pred.max())
-        ax2.plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect')
-        ax2.set_xlabel('Actual (RM)', fontweight='bold')
-        ax2.set_ylabel('Predicted (RM)', fontweight='bold')
-        ax2.set_title(f'{models[best_idx]}: Actual vs Predicted', fontweight='bold')
-        ax2.legend(fontsize=9)
-        ax2.grid(alpha=0.3)
+        axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect')
+        axes[1].set_xlabel('Actual (RM)', fontweight='bold')
+        axes[1].set_ylabel('Predicted (RM)', fontweight='bold')
+        axes[1].set_title(f'{models[best_idx]}: Actual vs Predicted', fontweight='bold')
+        axes[1].legend(fontsize=9)
+        axes[1].grid(alpha=0.3)
         
         plt.tight_layout()
         st.pyplot(fig2, use_container_width=True)
         plt.close()
         
-        # Best Model
+        # Best Model Summary
         st.subheader(f"🏆 Best Model: {models[best_idx]}")
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("R² Norm", f"{r2_norm[best_idx]:.2f}%", "✅ Excellent" if r2_norm[best_idx] < 10 else "Good")
-        col2.metric("NRMSE", f"{rmse_norm[best_idx]:.2f}%", "✅ Accurate" if rmse_norm[best_idx] < 10 else "Fair")
-        col3.metric("NMAE", f"{mae_norm[best_idx]:.2f}%", "✅ Good" if mae_norm[best_idx] < 10 else "Fair")
-        col4.metric("NMAPE", f"{mape_norm[best_idx]:.2f}%", "✅ Excellent" if mape_norm[best_idx] < 10 else "Good")
+        col1.metric("R²", f"{r2_norm[best_idx]:.2f}%")
+        col2.metric("RMSE", f"RM{rmse_raw[best_idx]:,.0f}")
+        col3.metric("MAE", f"RM{mae_raw[best_idx]:,.0f}")
+        col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🚀 **HuggingFace | Normalized (<10%) | All Diagrams**")
+st.sidebar.markdown("🚀 **Complete ML Pipeline | HuggingFace Data**")
