@@ -126,12 +126,11 @@ if page == "📊 Dataset Overview":
     st.dataframe(df_original.describe().round(2), use_container_width=True)
 
 # ============================================================================
-# PAGE 2: INITIAL EDA (CLEAN EXPLORATORY ANALYSIS)
+# PAGE 2: INITIAL EDA
 # ============================================================================
 elif page == "🔍 Initial EDA":
     st.header("INITIAL EXPLORATORY ANALYSIS")
     
-    # Figure 1: 2x2 Grid (Target Distribution, Log, Boxplot, Correlation)
     fig = plt.figure(figsize=(16, 12))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.2)
     
@@ -160,7 +159,6 @@ elif page == "🔍 Initial EDA":
     st.pyplot(fig)
     plt.close()
     
-    # Figure 2: Boxplot Analysis for Features
     st.subheader("Distribution Analysis of Features (Box Plot)")
     num_cols = df_original.select_dtypes(include=[np.number]).columns.tolist()
     features_to_plot = [c for c in num_cols if c != target_col]
@@ -175,7 +173,6 @@ elif page == "🔍 Initial EDA":
         st.pyplot(fig)
         plt.close()
     
-    # Figure 3: Large 3x3 Grid
     fig = plt.figure(figsize=(20, 14))
     gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
     
@@ -204,7 +201,6 @@ elif page == "🔍 Initial EDA":
     st.pyplot(fig)
     plt.close()
     
-    # Pairplot
     st.subheader("Variable Relationships & Distributions (Pairplot)")
     numeric_subset = [col for col in num_cols if col in df_original.columns][:4]
     if len(numeric_subset) > 1:
@@ -220,7 +216,6 @@ elif page == "🔍 Initial EDA":
 elif page == "🧹 Data Cleaning":
     st.header("DATA CLEANING PROCESS")
     
-    # Calculate cleaning metrics
     initial_rows = len(df_original)
     df_clean = df_original.copy()
     df_clean = df_clean.drop_duplicates()
@@ -231,10 +226,8 @@ elif page == "🧹 Data Cleaning":
     before = len(df_clean)
     df_clean = df_clean[(df_clean[target_col] >= Q5) & (df_clean[target_col] <= Q95)].copy()
     
-    # Visualization
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     
-    # Before/After records
     categories = ['Original', 'After Cleaning']
     counts = [initial_rows, len(df_clean)]
     colors_clean = ['#e74c3c', '#2ecc71']
@@ -246,7 +239,6 @@ elif page == "🧹 Data Cleaning":
         axes[0, 0].text(bar.get_x() + bar.get_width()/2, val + 20, f'{val:,}', 
                         ha='center', va='bottom', fontweight='bold', fontsize=11)
     
-    # Removed records
     removed_count = initial_rows - len(df_clean)
     axes[0, 1].text(0.5, 0.7, f'{removed_count:,}', ha='center', va='center', 
                     fontsize=20, fontweight='bold', color='#e74c3c')
@@ -257,7 +249,6 @@ elif page == "🧹 Data Cleaning":
     axes[0, 1].axis('off')
     axes[0, 1].set_title('Data Quality Improvement', fontweight='bold', fontsize=12)
     
-    # Price distribution
     axes[1, 0].hist(df_clean[target_col], bins=50, color='#2ecc71', alpha=0.7, edgecolor='black', linewidth=1)
     axes[1, 0].axvline(Q5, color='red', linestyle='--', linewidth=2, label=f'5th: RM{Q5:,.0f}')
     axes[1, 0].axvline(Q95, color='red', linestyle='--', linewidth=2, label=f'95th: RM{Q95:,.0f}')
@@ -267,7 +258,6 @@ elif page == "🧹 Data Cleaning":
     axes[1, 0].legend(fontsize=9)
     axes[1, 0].grid(alpha=0.3, axis='y')
     
-    # Data quality metrics
     metrics = ['Duplicates', 'Missing\nTargets', 'Outliers']
     values = [initial_rows - before, 0, before - len(df_clean)]
     bars = axes[1, 1].bar(metrics, values, color=['#3498db', '#e74c3c', '#f39c12'], 
@@ -290,7 +280,6 @@ elif page == "🧹 Data Cleaning":
 elif page == "🔧 Feature Engineering":
     st.header("FEATURE ENGINEERING PROCESS")
     
-    # Prepare data for feature engineering visualization
     df_fe = df_original.copy()
     df_fe = df_fe.drop_duplicates()
     df_fe = df_fe[df_fe[target_col].notna()].copy()
@@ -335,7 +324,6 @@ elif page == "🔧 Feature Engineering":
     
     final_features = len(df_fe.columns) - 1
     
-    # Visualization
     fig = plt.figure(figsize=(18, 10))
     gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
     
@@ -388,7 +376,6 @@ elif page == "🔧 Feature Engineering":
 elif page == "📋 Data Preparation":
     st.header("DATA PREPARATION: SPLITTING & SCALING")
     
-    # Prepare data
     df_prep = df_original.copy()
     df_prep = df_prep.drop_duplicates()
     df_prep = df_prep[df_prep[target_col].notna()].copy()
@@ -420,7 +407,6 @@ elif page == "📋 Data Preparation":
     X_train_scaled[numerical_features_all] = scaler.fit_transform(X_train[numerical_features_all])
     X_test_scaled[numerical_features_all] = scaler.transform(X_test[numerical_features_all])
     
-    # Visualization
     fig = plt.figure(figsize=(18, 10))
     gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
     
@@ -462,7 +448,7 @@ elif page == "📋 Data Preparation":
             edgecolor='black')
     ax4.set_xlabel(f'{sample_feature} Value', fontweight='bold', fontsize=11)
     ax4.set_ylabel('Frequency', fontweight='bold', fontsize=11)
-    ax4.set_title(f'Feature Distribution Before Scaling (Sample: {sample_feature})', fontweight='bold', fontsize=12)
+    ax4.set_title(f'Feature Distribution Before Scaling', fontweight='bold', fontsize=12)
     ax4.legend(fontsize=10)
     ax4.grid(alpha=0.3, axis='y')
     
@@ -484,8 +470,8 @@ elif page == "📋 Data Preparation":
 # ============================================================================
 elif page == "⚙️ Model Training":
     st.header("MODEL TRAINING & HYPERPARAMETER OPTIMIZATION")
+    st.info("🔄 Training models with K-Fold Cross-Validation (5 splits)...")
     
-    # Data preparation
     df_train = df_original.copy()
     df_train = df_train.drop_duplicates()
     df_train = df_train[df_train[target_col].notna()].copy()
@@ -520,39 +506,87 @@ elif page == "⚙️ Model Training":
     X_train_scaled[numerical_features_all] = scaler.fit_transform(X_train[numerical_features_all])
     X_test_scaled[numerical_features_all] = scaler.transform(X_test[numerical_features_all])
     
-    st.info("🔄 Training models...")
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    
     progress_bar = st.progress(0)
     
-    # MODEL 1: LINEAR REGRESSION
+    # ========== MODEL 1: LINEAR REGRESSION ==========
     progress_bar.progress(25)
+    st.subheader("1️⃣ Linear Regression")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.write("**Configuration:**")
+        st.code("LinearRegression()\nNo hyperparameters to tune", language="python")
+    
     model_lr = LinearRegression()
     model_lr.fit(X_train_scaled, y_train_log)
     y_pred_lr = np.expm1(model_lr.predict(X_test_scaled))
+    y_train_lr = np.expm1(model_lr.predict(X_train_scaled))
+    
     r2_lr = r2_score(y_test_original, y_pred_lr)
     rmse_lr = np.sqrt(mean_squared_error(y_test_original, y_pred_lr))
     mae_lr = mean_absolute_error(y_test_original, y_pred_lr)
     mape_lr = mean_absolute_percentage_error(y_test_original, y_pred_lr)
-    
-    y_train_lr = np.expm1(model_lr.predict(X_train_scaled))
     r2_train_lr = r2_score(y_train_original, y_train_lr)
     
-    # MODEL 2: RIDGE REGRESSION
+    with col2:
+        st.metric("Test R²", f"{r2_lr:.4f}", delta=f"{(r2_train_lr - r2_lr):.4f} diff")
+    
+    # ========== MODEL 2: RIDGE REGRESSION ==========
     progress_bar.progress(50)
+    st.subheader("2️⃣ Ridge Regression")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.write("**Configuration:**")
+        config_ridge = """Ridge(random_state=42, alpha=tuned)
+    
+GridSearchCV:
+  - alpha: [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+  - cv: KFold(n_splits=5)
+  - scoring: 'r2'"""
+        st.code(config_ridge, language="python")
+    
     param_grid_ridge = {'alpha': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-    ridge_search = GridSearchCV(Ridge(random_state=42), param_grid_ridge, cv=kfold, scoring='r2', n_jobs=-1, verbose=0)
+    ridge_search = GridSearchCV(Ridge(random_state=42), param_grid_ridge, cv=kfold, 
+                                scoring='r2', n_jobs=-1, verbose=0)
     ridge_search.fit(X_train_scaled, y_train_log)
+    
     y_pred_ridge = np.expm1(ridge_search.best_estimator_.predict(X_test_scaled))
+    y_train_ridge = np.expm1(ridge_search.best_estimator_.predict(X_train_scaled))
+    
     r2_ridge = r2_score(y_test_original, y_pred_ridge)
     rmse_ridge = np.sqrt(mean_squared_error(y_test_original, y_pred_ridge))
     mae_ridge = mean_absolute_error(y_test_original, y_pred_ridge)
     mape_ridge = mean_absolute_percentage_error(y_test_original, y_pred_ridge)
-    
-    y_train_ridge = np.expm1(ridge_search.best_estimator_.predict(X_train_scaled))
     r2_train_ridge = r2_score(y_train_original, y_train_ridge)
     
-    # MODEL 3: GRADIENT BOOSTING
+    with col2:
+        st.metric("Test R²", f"{r2_ridge:.4f}", delta=f"{(r2_train_ridge - r2_ridge):.4f} diff")
+        st.metric("Best α", f"{ridge_search.best_params_['alpha']}")
+    
+    # ========== MODEL 3: GRADIENT BOOSTING ==========
     progress_bar.progress(75)
+    st.subheader("3️⃣ Gradient Boosting")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.write("**Configuration:**")
+        config_gb = """GradientBoostingRegressor(
+  random_state=42,
+  validation_fraction=0.1,
+  n_iter_no_change=15)
+    
+GridSearchCV:
+  - n_estimators: [500]
+  - learning_rate: [0.05]
+  - max_depth: [4, 5, 6]
+  - subsample: [0.8, 1.0]
+  - max_features: ['sqrt']
+  - cv: KFold(n_splits=5)"""
+        st.code(config_gb, language="python")
+    
     param_grid_gb = {
         'n_estimators': [500],
         'learning_rate': [0.05],
@@ -565,97 +599,66 @@ elif page == "⚙️ Model Training":
         param_grid_gb, cv=kfold, scoring='r2', n_jobs=-1, verbose=0
     )
     gb_search.fit(X_train_scaled, y_train_log)
+    
     y_pred_gb = np.expm1(gb_search.best_estimator_.predict(X_test_scaled))
+    y_train_gb = np.expm1(gb_search.best_estimator_.predict(X_train_scaled))
+    
     r2_gb = r2_score(y_test_original, y_pred_gb)
     rmse_gb = np.sqrt(mean_squared_error(y_test_original, y_pred_gb))
     mae_gb = mean_absolute_error(y_test_original, y_pred_gb)
     mape_gb = mean_absolute_percentage_error(y_test_original, y_pred_gb)
-    
-    y_train_gb = np.expm1(gb_search.best_estimator_.predict(X_train_scaled))
     r2_train_gb = r2_score(y_train_original, y_train_gb)
     
-    # MODEL 4: RANDOM FOREST
+    with col2:
+        st.metric("Test R²", f"{r2_gb:.4f}", delta=f"{(r2_train_gb - r2_gb):.4f} diff")
+        st.metric("Best Depth", f"{gb_search.best_params_['max_depth']}")
+    
+    # ========== MODEL 4: RANDOM FOREST ==========
     progress_bar.progress(100)
+    st.subheader("4️⃣ Random Forest")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.write("**Configuration:**")
+        config_rf = """RandomForestRegressor(
+  random_state=42,
+  n_jobs=-1)
+    
+GridSearchCV:
+  - n_estimators: [200]
+  - max_depth: [15, 20, 25]
+  - min_samples_leaf: [2, 4]
+  - max_features: ['sqrt']
+  - cv: KFold(n_splits=5)"""
+        st.code(config_rf, language="python")
+    
     param_grid_rf = {
         'n_estimators': [200],
         'max_depth': [15, 20, 25],
         'min_samples_leaf': [2, 4],
-        'max_features': ['sqrt']
+        'max_features': ['sqrt'],
     }
     rf_search = GridSearchCV(
         RandomForestRegressor(random_state=42, n_jobs=-1),
         param_grid_rf, cv=kfold, scoring='r2', n_jobs=-1, verbose=0
     )
     rf_search.fit(X_train, y_train_log)
+    
     y_pred_rf = np.expm1(rf_search.best_estimator_.predict(X_test))
+    y_train_rf = np.expm1(rf_search.best_estimator_.predict(X_train))
+    
     r2_rf = r2_score(y_test_original, y_pred_rf)
     rmse_rf = np.sqrt(mean_squared_error(y_test_original, y_pred_rf))
     mae_rf = mean_absolute_error(y_test_original, y_pred_rf)
     mape_rf = mean_absolute_percentage_error(y_test_original, y_pred_rf)
-    
-    y_train_rf = np.expm1(rf_search.best_estimator_.predict(X_train))
     r2_train_rf = r2_score(y_train_original, y_train_rf)
     
-    # Visualization
-    fig = plt.figure(figsize=(18, 10))
-    gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+    with col2:
+        st.metric("Test R²", f"{r2_rf:.4f}", delta=f"{(r2_train_rf - r2_rf):.4f} diff")
+        st.metric("Best Depth", f"{rf_search.best_params_['max_depth']}")
     
-    ax1 = fig.add_subplot(gs[0, 0])
-    cv_results_ridge = ridge_search.cv_results_
-    ax1.plot(cv_results_ridge['param_alpha'], cv_results_ridge['mean_test_score'], 
-            marker='o', linewidth=2, markersize=8, color='#3498db', label='Mean CV Score')
-    ax1.fill_between(cv_results_ridge['param_alpha'], 
-                    cv_results_ridge['mean_test_score'] - cv_results_ridge['std_test_score'],
-                    cv_results_ridge['mean_test_score'] + cv_results_ridge['std_test_score'],
-                    alpha=0.2, color='#3498db')
-    ax1.set_xscale('log')
-    ax1.set_xlabel('Alpha (Regularization)', fontweight='bold', fontsize=11)
-    ax1.set_ylabel('CV R² Score', fontweight='bold', fontsize=11)
-    ax1.set_title('Ridge Regression: Hyperparameter Tuning', fontweight='bold', fontsize=12)
-    ax1.grid(alpha=0.3)
-    ax1.legend(fontsize=10)
+    st.info(f"✅ All models trained with **5-Fold Cross-Validation**")
     
-    ax2 = fig.add_subplot(gs[0, 1])
-    cv_results_gb = gb_search.cv_results_
-    depths = [p for p in cv_results_gb['param_max_depth']]
-    ax2.scatter(depths, cv_results_gb['mean_test_score'], s=100, alpha=0.6, color='#e74c3c', edgecolors='black')
-    ax2.set_xlabel('Max Depth', fontweight='bold', fontsize=11)
-    ax2.set_ylabel('CV R² Score', fontweight='bold', fontsize=11)
-    ax2.set_title('Gradient Boosting: Hyperparameter Tuning', fontweight='bold', fontsize=12)
-    ax2.grid(alpha=0.3)
-    
-    ax3 = fig.add_subplot(gs[1, 0])
-    cv_results_rf = rf_search.cv_results_
-    depths_rf = [p for p in cv_results_rf['param_max_depth']]
-    ax3.scatter(depths_rf, cv_results_rf['mean_test_score'], s=100, alpha=0.6, color='#2ecc71', edgecolors='black')
-    ax3.set_xlabel('Max Depth', fontweight='bold', fontsize=11)
-    ax3.set_ylabel('CV R² Score', fontweight='bold', fontsize=11)
-    ax3.set_title('Random Forest: Hyperparameter Tuning', fontweight='bold', fontsize=12)
-    ax3.grid(alpha=0.3)
-    
-    ax4 = fig.add_subplot(gs[1, 1])
-    ax4.axis('off')
-    params_text = f"""
-BEST HYPERPARAMETERS
-
-Ridge:
-  α = {ridge_search.best_params_['alpha']}
-
-Gradient Boosting:
-  max_depth = {gb_search.best_params_['max_depth']}
-
-Random Forest:
-  max_depth = {rf_search.best_params_['max_depth']}
-"""
-    ax4.text(0.1, 0.5, params_text, fontsize=11, family='monospace', fontweight='bold',
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-    ax4.set_title('Optimized Parameters', fontweight='bold', fontsize=12)
-    
-    plt.suptitle('MODEL TRAINING & HYPERPARAMETER OPTIMIZATION', fontsize=15, fontweight='bold')
-    st.pyplot(fig)
-    plt.close()
-    
-    # Store results for later use
     st.session_state.results = {
         'Linear Regression': {'R²': r2_lr, 'RMSE': rmse_lr, 'MAE': mae_lr, 'MAPE': mape_lr, 'train_r2': r2_train_lr, 'pred': y_pred_lr},
         'Ridge Regression': {'R²': r2_ridge, 'RMSE': rmse_ridge, 'MAE': mae_ridge, 'MAPE': mape_ridge, 'train_r2': r2_train_ridge, 'pred': y_pred_ridge},
@@ -663,6 +666,7 @@ Random Forest:
         'Random Forest': {'R²': r2_rf, 'RMSE': rmse_rf, 'MAE': mae_rf, 'MAPE': mape_rf, 'train_r2': r2_train_rf, 'pred': y_pred_rf}
     }
     st.session_state.y_test = y_test_original
+    st.session_state.y_train = y_train_original
 
 # ============================================================================
 # PAGE 7: MODEL EVALUATION
@@ -673,20 +677,39 @@ elif page == "🏆 Model Evaluation":
     if 'results' in st.session_state:
         results = st.session_state.results
         y_test = st.session_state.y_test
+        y_train = st.session_state.y_train
+        
+        # Normalize metrics using StandardScaler
+        scaler_metrics = StandardScaler()
+        
+        metrics_array = np.array([
+            [v['R²'] for v in results.values()],
+            [v['RMSE'] for v in results.values()],
+            [v['MAE'] for v in results.values()],
+            [v['MAPE'] for v in results.values()]
+        ]).T
+        
+        metrics_normalized = scaler_metrics.fit_transform(metrics_array)
         
         results_df = pd.DataFrame({
             'Model': list(results.keys()),
             'Train R²': [v['train_r2'] for v in results.values()],
+            'Test R² (Norm)': metrics_normalized[:, 0],
+            'RMSE (Norm)': metrics_normalized[:, 1],
+            'MAE (Norm)': metrics_normalized[:, 2],
+            'MAPE (Norm)': metrics_normalized[:, 3],
             'Test R²': [v['R²'] for v in results.values()],
             'RMSE': [v['RMSE'] for v in results.values()],
             'MAE': [v['MAE'] for v in results.values()],
             'MAPE (%)': [v['MAPE'] * 100 for v in results.values()]
         })
         
-        st.subheader("Model Performance Summary")
-        st.dataframe(results_df, use_container_width=True)
+        st.subheader("📊 Model Performance Summary")
+        st.dataframe(results_df[['Model', 'Train R²', 'Test R²', 'RMSE', 'MAE', 'MAPE (%)']], use_container_width=True)
         
-        # Visualization
+        st.subheader("📈 Normalized Metrics")
+        st.dataframe(results_df[['Model', 'Test R² (Norm)', 'RMSE (Norm)', 'MAE (Norm)', 'MAPE (Norm)']], use_container_width=True)
+        
         fig = plt.figure(figsize=(20, 14))
         gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
         
@@ -761,18 +784,17 @@ elif page == "🏆 Model Evaluation":
         ax5.legend()
         ax5.grid(axis='y', alpha=0.3)
         
-        # 6. Performance Heatmap
+        # 6. Normalized Metrics Heatmap
         ax6 = fig.add_subplot(gs[1, 2])
         heatmap_data = pd.DataFrame({
-            'Train R²': train_r2s,
-            'Test R²': test_r2s,
-            'RMSE/1k': [results[m]['RMSE']/1000 for m in models],
-            'MAE/1k': [results[m]['MAE']/1000 for m in models],
-            'MAPE%': mape_scores
+            'R² (Norm)': metrics_normalized[:, 0],
+            'RMSE (Norm)': metrics_normalized[:, 1],
+            'MAE (Norm)': metrics_normalized[:, 2],
+            'MAPE (Norm)': metrics_normalized[:, 3]
         }, index=['LR', 'Ridge', 'GB', 'RF'])
         
-        sns.heatmap(heatmap_data.T, annot=True, fmt='.2f', cmap='coolwarm', ax=ax6, cbar_kws={'label': 'Score'})
-        ax6.set_title('Final Performance Matrix', fontweight='bold', fontsize=12)
+        sns.heatmap(heatmap_data.T, annot=True, fmt=".2f", cmap='RdYlGn', ax=ax6, cbar_kws={'label': 'Normalized Score'})
+        ax6.set_title('Normalized Metrics Matrix', fontweight='bold', fontsize=12)
         
         # 7. Actual vs Predicted for best model
         best_idx = np.argmax(test_r2s)
@@ -804,7 +826,16 @@ elif page == "🏆 Model Evaluation":
         st.pyplot(fig)
         plt.close()
         
-        st.success(f"🏆 Best Model: **{best_model_name}** (Test R² = {test_r2s[best_idx]:.4f})")
+        st.success(f"🏆 **Best Model: {best_model_name}**")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Test R²", f"{test_r2s[best_idx]:.4f}")
+        with col2:
+            st.metric("RMSE", f"RM{rmse_scores[best_idx]/1000:.0f}k")
+        with col3:
+            st.metric("MAE", f"RM{mae_scores[best_idx]/1000:.0f}k")
+        with col4:
+            st.metric("MAPE", f"{mape_scores[best_idx]:.2f}%")
     else:
         st.warning("⚠️ Please train models first in the 'Model Training' section.")
 
