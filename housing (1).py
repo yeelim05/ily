@@ -946,19 +946,22 @@ elif page == "🏆 Model Evaluation":
         col4.metric("MAPE", f"{mape_raw[best_idx]:.2f}%", status_mape)
 
 # ============================================================================
-# PAGE 8: DOWNLOAD MODELS
+# PAGE 8: DOWNLOAD MODELS - FIXED
 # ============================================================================
 elif page == "💾 Download Models":
     st.header("💾 DOWNLOAD TRAINED MODELS")
     
     st.subheader("📊 File Size Summary")
     
-    total_size = 0
-    col1, col2 = st.columns([2, 1])
+    file_list = list(MODELS_DIR.glob('*'))
     
-    with col1:
+    if len(file_list) == 0:
+        st.warning("⚠️ No models saved yet. Train models first!")
+    else:
+        total_size = 0
         file_info = []
-        for file in sorted(MODELS_DIR.glob('*')):
+        
+        for file in sorted(file_list):
             size_mb = file.stat().st_size / (1024**2)
             total_size += size_mb
             file_info.append({
@@ -966,40 +969,62 @@ elif page == "💾 Download Models":
                 'Size (MB)': f"{size_mb:.2f}"
             })
         
-        if file_info:
-            st.dataframe(pd.DataFrame(file_info), use_container_width=True)
-            st.metric("Total Size", f"{total_size:.2f} MB")
-        else:
-            st.warning("⚠️ No models saved yet. Train models first!")
-    
-    st.subheader("📥 Download Individual Models")
-    
-    for file in sorted(MODELS_DIR.glob('*')):
-        if file.suffix == '.joblib':
-            model_name = file.stem.replace('_model', '')
-            
-            with open(file, 'rb') as f:
-                st.download_button(
-                    label=f"⬇️ Download {model_name} Model",
-                    data=f,
-                    file_name=file.name,
-                    mime="application/octet-stream",
-                    key=f"download_{model_name}_model"
-                )
-    
-    st.subheader("📥 Download Scalers")
-    
-    for file in sorted(MODELS_DIR.glob('*_scalers.pkl')):
-        model_name = file.stem.replace('_scalers', '')
+        st.dataframe(pd.DataFrame(file_info), use_container_width=True)
+        st.metric("Total Size", f"{total_size:.2f} MB")
         
-        with open(file, 'rb') as f:
-            st.download_button(
-                label=f"⬇️ Download {model_name} Scalers",
-                data=f,
-                file_name=file.name,
-                mime="application/octet-stream",
-                key=f"download_{model_name}_scalers"
-            )
-    
+        st.subheader("📥 Download Individual Models")
+        st.write("Click below to download model files:")
+        
+        col1, col2 = st.columns(2)
+        
+        joblib_files = list(MODELS_DIR.glob('*_model.joblib'))
+        pkl_files = list(MODELS_DIR.glob('*_scalers.pkl'))
+        
+        if joblib_files:
+            with col1:
+                st.write("**Models:**")
+                for file in sorted(joblib_files):
+                    with open(file, 'rb') as f:
+                        st.download_button(
+                            label=f"⬇️ {file.name}",
+                            data=f.read(),
+                            file_name=file.name,
+                            mime="application/octet-stream"
+                        )
+        
+        if pkl_files:
+            with col2:
+                st.write("**Scalers:**")
+                for file in sorted(pkl_files):
+                    with open(file, 'rb') as f:
+                        st.download_button(
+                            label=f"⬇️ {file.name}",
+                            data=f.read(),
+                            file_name=file.name,
+                            mime="application/octet-stream"
+                        )
+        
+        st.subheader("📖 How to Use Downloaded Models")
+        st.code("""
+import joblib
+import pickle
+
+# Load model
+model = joblib.load('Gradient_Boosting_model.joblib')
+
+# Load scalers
+with open('Gradient_Boosting_scalers.pkl', 'rb') as f:
+    scalers = pickle.load(f)
+
+# Use for predictions
+robust_scaler = scalers['robust_scaler']
+power_transformer = scalers['power_transformer']
+
+X_scaled = robust_scaler.transform(X)
+X_scaled = power_transformer.transform(X_scaled)
+
+predictions = model.predict(X_scaled)
+        """, language="python")
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("🚀 **Advanced ML Pipeline | Proper Scaling & Normalization**")
