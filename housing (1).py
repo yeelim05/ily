@@ -670,11 +670,6 @@ subsample=[0.8,0.9,1.0]""", language="python")
     mape_gb = calculate_proper_mape(y_test.values, y_pred_gb)
     r2_train_gb = r2_score(y_train, y_train_gb)
     
-    with col2:
-        st.metric("R²", f"{r2_gb:.4f}")
-        st.metric("RMSE", f"{rmse_gb:.4f}")
-        st.metric("MAPE", f"{mape_gb:.2f}%")
-    
     # MODEL 2: RANDOM FOREST
     progress.progress(50)
     st.subheader("2️⃣ Random Forest Regressor")
@@ -707,11 +702,6 @@ min_samples_leaf=[5,10]""", language="python")
     mape_rf = calculate_proper_mape(y_test.values, y_pred_rf)
     r2_train_rf = r2_score(y_train, y_train_rf)
     
-    with col2:
-        st.metric("R²", f"{r2_rf:.4f}")
-        st.metric("RMSE", f"{rmse_rf:.4f}")
-        st.metric("MAPE", f"{mape_rf:.2f}%")
-    
     # MODEL 3: RIDGE
     progress.progress(75)
     st.subheader("3️⃣ Ridge Regression")
@@ -735,11 +725,6 @@ alpha=[0.1,1,10,100,1000]""", language="python")
     mae_ridge = mean_absolute_error(y_test, y_pred_ridge)
     mape_ridge = calculate_proper_mape(y_test.values, y_pred_ridge)
     r2_train_ridge = r2_score(y_train, y_train_ridge)
-    
-    with col2:
-        st.metric("R²", f"{r2_ridge:.4f}")
-        st.metric("Best α", f"{ridge_search.best_params_['alpha']}")
-        st.metric("MAPE", f"{mape_ridge:.2f}%")
     
     # MODEL 4: SVR
     progress.progress(100)
@@ -765,11 +750,6 @@ gamma=['scale',0.001]""", language="python")
     mae_svr = mean_absolute_error(y_test, y_pred_svr)
     mape_svr = calculate_proper_mape(y_test.values, y_pred_svr)
     r2_train_svr = r2_score(y_train, y_train_svr)
-    
-    with col2:
-        st.metric("R²", f"{r2_svr:.4f}")
-        st.metric("Best C", f"{svr_search.best_params_['C']}")
-        st.metric("MAPE", f"{mape_svr:.2f}%")
     
     st.success("✅ Training complete with 5-Fold CV!")
     
